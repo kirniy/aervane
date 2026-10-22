@@ -34,8 +34,16 @@ final class AppModel {
     var displayTemperature: Double?
     var fahrenheit: Bool { didSet { UserDefaults.standard.set(fahrenheit, forKey: "fahrenheit"); changed?() } }
     var lowPower: Bool { didSet { UserDefaults.standard.set(lowPower, forKey: "lowPower"); schedulePoll() } }
-    var controlDeadline: Date?
-    var manualDuration: TimeInterval = 1800
+    private var returnTimer: ManualReturnTimer
+    var controlDeadline: Date? { returnTimer.deadline }
+    var autoReturnEnabled: Bool {
+        get { returnTimer.enabled }
+        set { configureReturnTimer(enabled: newValue, minutes: returnTimer.minutes) }
+    }
+    var autoReturnMinutes: Double {
+        get { returnTimer.minutes }
+        set { configureReturnTimer(enabled: returnTimer.enabled, minutes: newValue) }
+    }
     var competingApp: NSRunningApplication? { NSRunningApplication.runningApplications(withBundleIdentifier: "com.crystalidea.macsfancontrol").first }
     var minimumPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return ceil(s.minimumRPM / s.maximumRPM * 100) }
     var actualPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return min(100, max(0, s.currentRPM / s.maximumRPM * 100)) }
@@ -49,6 +57,8 @@ final class AppModel {
 
     init() {
         let defaults = UserDefaults.standard
+        returnTimer = ManualReturnTimer(enabled: defaults.bool(forKey: "autoReturnEnabled"),
+                                       minutes: defaults.object(forKey: "autoReturnMinutes") as? Double ?? 30)
         selectedSensor = defaults.string(forKey: "sensor") ?? "CPU"
         fahrenheit = defaults.bool(forKey: "fahrenheit"); lowPower = defaults.bool(forKey: "lowPower")
         if let data = defaults.data(forKey: "presets"), let saved = try? JSONDecoder().decode([FanPreset].self, from: data) {
@@ -77,12 +87,14 @@ final class AppModel {
         let generation = controlGeneration
         queue.async { [weak self] in
             guard let self else { return }
-            let result: Result<(FanSnapshot, Double), Error> = Result {
+            let result: Result<(FanSnapshot, Double?), Error> = Result {
                 let cpu = try self.reader.readCPUTemperature(), fan = try self.reader.readFan()
-                var temp = cpu
+                var temp: Double? = cpu
                 if sensor != "CPU" {
                     let gpu = try? self.reader.readGPUTemperature()
-                    if sensor == "GPU" { guard let gpu else { throw FanControlError.hardwareFailure("GPU temperature is unavailable on this Mac.") }; temp = gpu }
+                    // An unavailable optional display sensor must not end
+                    // manual control while CPU and fan telemetry are healthy.
+                    if sensor == "GPU" { temp = gpu }
                     else { temp = max(cpu, gpu ?? cpu) }
                 }
                 return (FanSnapshot(currentRPM: fan.currentRPM, minimumRPM: fan.minimumRPM, maximumRPM: fan.maximumRPM, targetPercent: fan.targetPercent, automatic: fan.automatic, temperatureCelsius: cpu), temp)
@@ -94,15 +106,20 @@ final class AppModel {
                 switch result {
                 case .success(let (snapshot, temp)):
                     self.sample = snapshot; self.displayTemperature = temp
-                    self.history.append(temp); if self.history.count > 60 { self.history.removeFirst(self.history.count - 60) }
                     if self.error?.hasPrefix("Sensor:") == true { self.error = nil }
+                    if let temp {
+                        self.history.append(temp); if self.history.count > 60 { self.history.removeFirst(self.history.count - 60) }
+                    } else {
+                        self.history.removeAll()
+                        if self.error == nil { self.error = "Sensor: GPU temperature is unavailable on this Mac." }
+                    }
                     if self.ownsControl && snapshot.automatic {
                         // The helper may already have restored Auto after a
                         // safety event. Readback confirms that transition; do
                         // not repeatedly ask a released lease to restore again.
-                        self.ownsControl = false; self.controlDeadline = nil
+                        self.ownsControl = false; self.returnTimer.cancel()
                         self.stopHeartbeat()
-                    } else if self.ownsControl && (self.controlDeadline.map { $0 < .now } ?? false) { self.restore() }
+                    } else if self.ownsControl && self.returnTimer.isDue(now: .now) { self.restore() }
                 case .failure(let failure): self.error = "Sensor: \(failure.localizedDescription)"; self.displayTemperature = nil; if self.ownsControl { self.restore() }
                 }
                 self.changed?()
@@ -143,7 +160,7 @@ final class AppModel {
         _ = requests.reset(); finishRestoreWaiters()
         // Closing the old connection makes the helper restore anything that
         // session owned; this app no longer owns control after reconnecting.
-        ownsControl = false; controlDeadline = nil; stopHeartbeat()
+        ownsControl = false; returnTimer.cancel(); stopHeartbeat()
         connectionGeneration = UUID(); let generation = connectionGeneration
         helper?.onDisconnect = nil; helper?.invalidate(); let client = HelperClient(); helper = client
         client.onDisconnect = { [weak self] in DispatchQueue.main.async {
@@ -154,7 +171,7 @@ final class AppModel {
             // also satisfies any Auto request that was still queued here.
             _ = self.requests.reset()
             self.helperReady = false; self.ownsControl = false; self.settingUp = false
-            self.controlDeadline = nil; self.stopHeartbeat()
+            self.returnTimer.cancel(); self.stopHeartbeat()
             self.error = "Fan helper disconnected. Reconnecting…"
             self.finishRestoreWaiters()
             self.changed?()
@@ -179,7 +196,7 @@ final class AppModel {
         pendingPercent = nil
         if let completion { restoreWaiters.append(completion) }
         guard helperReady, helper != nil else {
-            ownsControl = false; controlDeadline = nil; stopHeartbeat()
+            ownsControl = false; returnTimer.cancel(); stopHeartbeat()
             finishRestoreWaiters(); changed?(); return
         }
         // A set in flight may be about to take control, so Auto still has
@@ -211,7 +228,8 @@ final class AppModel {
         case (.set, .success(let snapshot)):
             pendingPercent = nil; sample = snapshot; error = nil
             ownsControl = !snapshot.automatic
-            controlDeadline = .now.addingTimeInterval(manualDuration); startHeartbeat()
+            if ownsControl { returnTimer.start(now: .now) } else { returnTimer.cancel() }
+            startHeartbeat()
         case (.set, .failure(let failure)):
             // The helper rolls back failed writes itself and says whether Auto
             // verified. Ownership is then confirmed by the next readback. A
@@ -220,12 +238,12 @@ final class AppModel {
             error = failure.localizedDescription
         case (.automatic, .success(let snapshot)):
             sample = snapshot; error = nil
-            ownsControl = false; controlDeadline = nil; stopHeartbeat()
+            ownsControl = false; returnTimer.cancel(); stopHeartbeat()
         case (.automatic, .failure(let failure)):
             if case .notOwner? = HelperClient.classify(failure) {
                 // The helper already ended this lease (safety restore,
                 // expiry). There is nothing left for us to restore.
-                ownsControl = false; controlDeadline = nil; stopHeartbeat()
+                ownsControl = false; returnTimer.cancel(); stopHeartbeat()
             } else {
                 error = "Could not restore automatic control: \(failure.localizedDescription)"
             }
@@ -252,7 +270,7 @@ final class AppModel {
                     // the helper stays connected and usable. Transport errors
                     // and timeouts arrive through the disconnect handler.
                     guard case .notOwner? = HelperClient.classify(error) else { return }
-                    self.ownsControl = false; self.controlDeadline = nil; self.stopHeartbeat()
+                    self.ownsControl = false; self.returnTimer.cancel(); self.stopHeartbeat()
                     self.error = "The helper ended manual control and is returning the fan to Auto."
                     self.changed?()
                 }
@@ -261,6 +279,12 @@ final class AppModel {
         heartbeat?.tolerance = 0.5
     }
     private func stopHeartbeat() { heartbeat?.invalidate(); heartbeat = nil }
+    private func configureReturnTimer(enabled: Bool, minutes: Double) {
+        returnTimer.configure(enabled: enabled, minutes: minutes, manual: ownsControl, now: .now)
+        UserDefaults.standard.set(returnTimer.enabled, forKey: "autoReturnEnabled")
+        UserDefaults.standard.set(returnTimer.minutes, forKey: "autoReturnMinutes")
+        changed?()
+    }
     func savePresets() { if let data = try? JSONEncoder().encode(presets) { UserDefaults.standard.set(data, forKey: "presets") }; changed?() }
     func toggleLogin() { do { if loginEnabled { try SMAppService.mainApp.unregister() } else { try SMAppService.mainApp.register() }; changed?() } catch { self.error = error.localizedDescription; changed?() } }
 }
