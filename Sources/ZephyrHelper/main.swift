@@ -15,5 +15,6 @@ final class Delegate: NSObject, NSXPCListenerDelegate {
 }
 
 let delegate = Delegate()
+FanControlService.bootstrap()
 let listener = NSXPCListener(machServiceName: "dev.kirniy.aervane.helper")
 listener.delegate = delegate; listener.resume(); RunLoop.current.run()

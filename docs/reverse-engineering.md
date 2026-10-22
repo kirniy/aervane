@@ -45,6 +45,15 @@ No other REA server or Hopper process was stopped. The CLI path is therefore
 the verified recovery path for this task; a fresh Codex MCP connection is
 required before claiming live MCP decompilation.
 
+After isolating and closing the translocated, unlicensed Hopper process, the
+live REA MCP Hopper provider opened the helper and decompiled `_SMCReadKey`
+successfully. Current MCP evidence is
+`ev_62c8244dbc4e2d9d220b108ff8512aa2d10f9fff9bfe7cf464ab14302b9eb3a5`; the
+provider reported the helper's arm64 slice, selector-2 `IOConnectCallStructMethod`
+calls, an 80-byte request envelope, lazy `KeyInfoMap` caching, and the
+key-name reconstruction path. The closed evidence snapshot is stored at
+`work/rea/hopper-mcp-read-key.json`.
+
 ## AppleSMC read protocol
 
 `Sources/SMC/SMC.c` implements the independent AppleSMC user-client envelope:

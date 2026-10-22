@@ -18,10 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var ending = false
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        installKeyboardCommands()
         model = AppModel(); content = PanelView(model: model)
         item = NSStatusBar.system.statusItem(withLength: 70)
         if let button = item.button {
             button.target = self; button.action = #selector(toggle); button.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+            button.sendAction(on: .leftMouseDown)
             let icon = Glyphs.image(.airflow, size: 14); icon.isTemplate = true; button.image = icon; button.imagePosition = .imageLeading; button.imageHugsTitle = true
             button.toolTip = "Aervane · CPU temperature and fan control"; button.setAccessibilityLabel("Aervane temperature and fan control")
         }
@@ -34,17 +36,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         content.autoresizingMask = [.width, .height]
         panel.escape = { [weak self] in self?.hide() }
+        panel.initialFirstResponder = content.preferredFirstResponder
         content.resize = { [weak self] height in self?.resize(height) }; content.quit = { NSApp.terminate(nil) }
         model.changed = { [weak self] in self?.refresh() }; refresh()
         if CommandLine.arguments.contains("--show") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.show() } }
         if CommandLine.arguments.contains("--enable-helper") { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.show(); self.model.enableControl() } }
     }
     private func refresh() { item.button?.title = " \(model.temperatureText)\(model.temperatureUnit)"; if panel.isVisible { content.update() } }
+    private func installKeyboardCommands() {
+        // Accessory apps still need an Edit menu for the field editor's native
+        // command-key equivalents (including Select All and Paste).
+        let menu = NSMenu()
+        let application = NSMenuItem(); let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit Aervane", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        application.submenu = appMenu; menu.addItem(application)
+        let edit = NSMenuItem(); let editMenu = NSMenu(title: "Edit")
+        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
+            editMenu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
+        }
+        let redo = NSMenuItem(title: "Redo", action: Selector("redo:"), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]; editMenu.insertItem(redo, at: 1)
+        edit.submenu = editMenu; menu.addItem(edit)
+        NSApp.mainMenu = menu
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        show()
+        return true
+    }
     @objc private func toggle() { panel.isVisible ? hide() : show() }
     private func show() {
         guard !panel.isVisible else { return }
         model.panelVisible = true; content.update(); positionPanel()
+        NSApp.activate()
         panel.alphaValue = Theme.reduceMotion ? 1 : 0; panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(content.preferredFirstResponder)
         if !Theme.reduceMotion { NSAnimationContext.runAnimationGroup { $0.duration = 0.16; $0.timingFunction = CAMediaTimingFunction(name: .easeOut); panel.animator().alphaValue = 1 } }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, !self.isPointerOverStatusItem() else { return }; self.hide()
@@ -59,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return window.convertToScreen(button.convert(button.bounds, to: nil)).insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation)
     }
     private func hide() {
+        content.prepareForHiding()
         panel.orderOut(nil); model.panelVisible = false; item.button?.highlight(false)
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }; outsideMonitor = nil
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }; localMonitor = nil
@@ -77,8 +103,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !ending, model.ownsControl else { return .terminateNow }; ending = true
-        model.restore { NSApp.reply(toApplicationShouldTerminate: true) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { NSApp.reply(toApplicationShouldTerminate: true) }
+        var replied = false
+        let replyOnce = {
+            guard !replied else { return }
+            replied = true
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        model.restore(completion: replyOnce)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: replyOnce)
         return .terminateLater
     }
 }

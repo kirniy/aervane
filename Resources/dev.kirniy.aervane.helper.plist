@@ -6,4 +6,5 @@
     <key>BundleProgram</key><string>Contents/Library/LaunchDaemons/AervaneHelper</string>
     <key>ProgramArguments</key><array><string>Contents/Library/LaunchDaemons/AervaneHelper</string></array>
     <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
 </dict></plist>

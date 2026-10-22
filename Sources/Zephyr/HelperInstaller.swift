@@ -1,6 +1,5 @@
 import Foundation
 import ServiceManagement
-import Security
 
 public enum HelperInstallError: Error, LocalizedError {
     case requiresApproval
@@ -23,19 +22,4 @@ public final class HelperInstaller {
     @available(macOS 13.0, *)
     public func disable() throws { try SMAppService.daemon(plistName: HelperRegistration.plistName).unregister() }
 
-    /// Development fallback for macOS releases where the LaunchDaemon API is
-    /// unavailable. The helper bundle must carry the matching SMPrivilegedExecutables
-    /// requirement; production builds should use SMAppService and notarization.
-    @available(macOS, deprecated: 13.0, message: "Use SMAppService.daemon for notarized builds")
-    public func enableLegacyBless() throws {
-        var authorization: AuthorizationRef?
-        guard AuthorizationCreate(nil, nil, [], &authorization) == errAuthorizationSuccess,
-              let authorization else { throw HelperInstallError.notFound }
-        defer { AuthorizationFree(authorization, []) }
-        var error: Unmanaged<CFError>?
-        guard SMJobBless(kSMDomainSystemLaunchd, "dev.kirniy.aervane.helper" as CFString, authorization, &error) else {
-            if let error { throw error.takeRetainedValue() }
-            throw NSError(domain: "Aervane.Helper", code: 1, userInfo: [NSLocalizedDescriptionKey: "SMJobBless failed"])
-        }
-    }
 }

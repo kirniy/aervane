@@ -3,6 +3,49 @@ import XCTest
 import CSMC
 
 final class SMCTests: XCTestCase {
+    private func floating(_ key: String, _ number: Float) -> SMCReading {
+        var value = number
+        return SMCReading(key: key, dataType: 0x666C7420, bytes: withUnsafeBytes(of: &value) { Array($0) })
+    }
+    func testMissingPreviouslyDiscoveredHotCoreFailsSafe() throws {
+        var missingHotCore = false
+        let reader = SMCReader { key in
+            if key == "Tp01" { return self.floating(key, 65) }
+            if key == "Tp05", !missingHotCore { return self.floating(key, 91) }
+            throw SMCError.readFailed(key, -4)
+        }
+        XCTAssertEqual(try reader.readCPUHottestTemperature(), 91)
+        missingHotCore = true
+        XCTAssertThrowsError(try reader.readCPUHottestTemperature())
+        XCTAssertThrowsError(try reader.readCPUTemperature())
+    }
+    func testIntelFallbackAlsoSupportsSafetyMaximum() throws {
+        let reader = SMCReader { key in
+            guard key == "TC0P" else { throw SMCError.readFailed(key, -4) }
+            return self.floating(key, 74)
+        }
+        XCTAssertEqual(try reader.readCPUHottestTemperature(), 74)
+    }
+    func testFanSpeedPayloadsHaveExactTypesAndLengths() throws {
+        XCTAssertEqual(try SMCReader.decodeFanSpeed(SMCReading(key: "F0Ac", dataType: 0x66706532, bytes: [0x2E, 0xE0])), 3000)
+        XCTAssertThrowsError(try SMCReader.decodeFanSpeed(SMCReading(key: "F0Ac", dataType: 0x66706532, bytes: [0, 1, 2])))
+        XCTAssertThrowsError(try SMCReader.decodeFanSpeed(SMCReading(key: "F0Ac", dataType: 0x75693820, bytes: [50])))
+    }
+    func testInvalidFanModeAndBoundsAreRejected() throws {
+        var invalidMode = true
+        let reader = SMCReader { key in
+            switch key {
+            case "F0Ac": return self.floating(key, 3000)
+            case "F0Mn": return self.floating(key, invalidMode ? 1000 : 6000)
+            case "F0Mx": return self.floating(key, 5000)
+            case "F0Md": return SMCReading(key: key, dataType: invalidMode ? 0x666C7420 : 0x75693820, bytes: [0])
+            default: throw SMCError.readFailed(key, -4)
+            }
+        }
+        XCTAssertThrowsError(try reader.readFan())
+        invalidMode = false
+        XCTAssertThrowsError(try reader.readFan())
+    }
     func testDecodesSp78() throws {
         let sample = SMCReading(key: "TC0P", dataType: 0x73703738, bytes: [0x4A, 0x80])
         XCTAssertEqual(try SMCReader.decodeTemperature(sample), 74.5, accuracy: 0.001)

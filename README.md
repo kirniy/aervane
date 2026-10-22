@@ -12,7 +12,12 @@
 
 A native Mac menu-bar utility with CPU temperature at a glance, direct percentage-based fan control, and editable presets in one glass panel. Built with Swift, AppKit, and a small C bridge to AppleSMC. No embedded browser, runtime packages, telemetry, or background network requests.
 
-**Development preview.** Live temperature/fan reads and a signed local build have been verified on an M4 Mac mini. Privileged installation and physical fan writes are still being validated. The interface is being revised following hands-on feedback. There is no production release or working Homebrew cask yet.
+**Development preview.** Live temperature/fan reads, a development-signed local build, and keyboard/accessibility interactions have been verified on an M4 Mac mini. Thirty automated tests cover sensor decoding, ownership, recovery, and slider regressions. Privileged installation and physical fan writes await validation. There is no production release or working Homebrew cask yet.
+
+<p align="center">
+  <img src="docs/assets/menu-bar-preview.png" alt="Actual Aervane development preview: CPU temperature, percentage slider, and inline presets" width="380">
+</p>
+<p align="center"><sub>Actual macOS capture. The selected speed is explicitly a preview until setup.</sub></p>
 
 ### Build locally
 
@@ -38,7 +43,7 @@ For a development-signed build, set `SIGN_IDENTITY` to an identity from `securit
 
 ### Development
 
-Start with [HANDOFF.md](HANDOFF.md) for current work, acceptance criteria, and validation gaps. [PRODUCT.md](PRODUCT.md) captures the brief; [hardware findings](docs/reverse-engineering.md) document the independent implementation and investigation scope.
+Start with [HANDOFF.md](HANDOFF.md) for current work, acceptance criteria, and validation gaps. [PRODUCT.md](PRODUCT.md) captures the brief; [DESIGN.md](DESIGN.md) records the native design system. See [hardware findings](docs/reverse-engineering.md), [verification](docs/verification.md), and [resource measurements](docs/performance.md).
 
 Homebrew packaging is staged in [`Casks/aervane.rb.in`](Casks/aervane.rb.in). A real checksum and release URL will be added after a distributable build is verified.
 

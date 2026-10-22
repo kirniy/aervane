@@ -11,6 +11,8 @@ let package = Package(
         .target(name: "ZephyrCore"),
         .executableTarget(name: "Zephyr", dependencies: ["SMC", "ZephyrCore"], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("ServiceManagement"), .linkedFramework("Security")]),
         .executableTarget(name: "ZephyrHelper", dependencies: ["SMC", "ZephyrCore"], linkerSettings: [.linkedFramework("Security"), .linkedFramework("IOKit")]),
+        .testTarget(name: "HelperTests", dependencies: ["ZephyrHelper", "ZephyrCore"]),
+        .testTarget(name: "InterfaceTests", dependencies: ["Zephyr"]),
         .testTarget(name: "SMCTests", dependencies: ["SMC"]),
         .testTarget(name: "ZephyrCoreTests", dependencies: ["ZephyrCore"])
     ]

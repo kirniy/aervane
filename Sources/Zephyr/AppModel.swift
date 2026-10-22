@@ -11,6 +11,8 @@ final class AppModel {
     private var heartbeat: Timer?
     private var helper: HelperClient?
     private var connectionGeneration = UUID()
+    private var controlGeneration: UInt64 = 0
+    private var nextReconnect = Date.distantPast
     private let installer = HelperInstaller()
     private var sleepObservers: [NSObjectProtocol] = []
     var sample: FanSnapshot?
@@ -58,8 +60,9 @@ final class AppModel {
     }
     private var polling = false
     func poll() {
-        guard !polling else { return }; polling = true
+        guard !polling, !busy else { return }; polling = true
         let sensor = selectedSensor
+        let generation = controlGeneration
         queue.async { [weak self] in
             guard let self else { return }
             let result: Result<(FanSnapshot, Double), Error> = Result {
@@ -74,6 +77,8 @@ final class AppModel {
             }
             DispatchQueue.main.async {
                 self.polling = false
+                // A read begun before a fan command cannot describe its result.
+                guard generation == self.controlGeneration, sensor == self.selectedSensor else { return }
                 switch result {
                 case .success(let (snapshot, temp)):
                     self.sample = snapshot; self.displayTemperature = temp
@@ -83,6 +88,10 @@ final class AppModel {
                 case .failure(let failure): self.error = "Sensor: \(failure.localizedDescription)"; self.displayTemperature = nil; if self.ownsControl { self.restore() }
                 }
                 self.changed?()
+                if !self.helperReady, !self.busy, Date() >= self.nextReconnect, self.installer.status == .enabled {
+                    self.nextReconnect = Date().addingTimeInterval(10)
+                    self.connectHelper()
+                }
             }
         }
     }
@@ -98,9 +107,18 @@ final class AppModel {
         catch { self.error = error.localizedDescription; busy = false; changed?(); if installer.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() } }
     }
     func connectHelper() {
+        controlGeneration &+= 1
         connectionGeneration = UUID(); let generation = connectionGeneration
         helper?.onDisconnect = nil; helper?.invalidate(); let client = HelperClient(); helper = client
-        client.onDisconnect = { [weak self] in DispatchQueue.main.async { guard let self, self.connectionGeneration == generation else { return }; self.helperReady = false; self.ownsControl = false; self.heartbeat?.invalidate(); self.changed?() } }
+        client.onDisconnect = { [weak self] in DispatchQueue.main.async {
+            guard let self, self.connectionGeneration == generation else { return }
+            self.connectionGeneration = UUID()
+            self.controlGeneration &+= 1
+            self.helperReady = false; self.ownsControl = false; self.busy = false
+            self.controlDeadline = nil; self.heartbeat?.invalidate()
+            self.error = "Fan helper disconnected. Reconnecting…"
+            self.changed?()
+        } }
         client.snapshot { [weak self] result in DispatchQueue.main.async {
             guard let self, self.connectionGeneration == generation else { return }; self.busy = false
             switch result { case .success: self.helperReady = true; self.error = nil; if let pending = self.pendingPercent { self.setPercent(pending) }; case .failure(let failure): self.helperReady = false; self.error = failure.localizedDescription }
@@ -108,12 +126,18 @@ final class AppModel {
         } }
     }
     func setPercent(_ percent: Double) {
-        let bounded = max(minimumPercent, min(100, percent))
+        guard !busy else { return }
+        guard percent.isFinite else { return }
+        let bounded = max(minimumPercent, min(100, percent.rounded()))
         guard !stale else { error = "Waiting for a fresh sensor reading."; changed?(); return }
         guard helperReady, competingApp == nil, let helper else { pendingPercent = bounded; error = nil; changed?(); return }
+        controlGeneration &+= 1
+        let operation = controlGeneration, connection = connectionGeneration
         busy = true; error = nil; changed?()
-        helper.set(percent: max(minimumPercent, min(100, percent))) { [weak self] result in DispatchQueue.main.async {
-            guard let self else { return }; self.busy = false
+        helper.set(percent: bounded) { [weak self] result in DispatchQueue.main.async {
+            guard let self, self.connectionGeneration == connection, self.controlGeneration == operation else { return }
+            self.controlGeneration &+= 1
+            self.busy = false
             switch result {
             case .success(let snapshot): self.pendingPercent = nil; self.sample = snapshot; self.ownsControl = !snapshot.automatic; self.controlDeadline = .now.addingTimeInterval(self.manualDuration); self.startHeartbeat()
             case .failure(let failure): self.error = failure.localizedDescription
@@ -123,16 +147,32 @@ final class AppModel {
     }
     private func startHeartbeat() {
         heartbeat?.invalidate(); guard ownsControl else { return }
-        heartbeat = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.helper?.heartbeat { error in if let error { DispatchQueue.main.async { self?.error = error.localizedDescription; self?.helperReady = false; self?.ownsControl = false; self?.heartbeat?.invalidate(); self?.changed?() } } } }
+        let connection = connectionGeneration
+        heartbeat = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.helper?.heartbeat { error in
+                if let error { DispatchQueue.main.async {
+                    guard let self, self.connectionGeneration == connection else { return }
+                    self.controlGeneration &+= 1
+                    self.error = error.localizedDescription; self.helperReady = false; self.ownsControl = false
+                    self.busy = false; self.controlDeadline = nil; self.heartbeat?.invalidate(); self.changed?()
+                } }
+            }
+        }
         heartbeat?.tolerance = 0.5
     }
     func restore(completion: (() -> Void)? = nil) {
         pendingPercent = nil
         guard ownsControl else { changed?(); completion?(); return }
+        controlGeneration &+= 1
+        let operation = controlGeneration, connection = connectionGeneration
+        busy = true
         heartbeat?.invalidate(); controlDeadline = nil
-        guard let helper, helperReady else { ownsControl = false; completion?(); return }
+        guard let helper, helperReady else { ownsControl = false; busy = false; changed?(); completion?(); return }
+        changed?()
         helper.automatic { [weak self] result in DispatchQueue.main.async {
-            guard let self else { completion?(); return }
+            guard let self, self.connectionGeneration == connection, self.controlGeneration == operation else { completion?(); return }
+            self.controlGeneration &+= 1
+            self.busy = false
             switch result { case .success(let snapshot): self.sample = snapshot; self.ownsControl = false; case .failure(let failure): self.error = "Could not restore automatic control: \(failure.localizedDescription)" }
             self.changed?(); completion?()
         } }

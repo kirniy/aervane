@@ -8,5 +8,6 @@ xcuserdata/
 .impeccable/review/
 .impeccable/mocks/
 .impeccable/state/
+.impeccable/questions/
 *.p12
 *.mobileprovision

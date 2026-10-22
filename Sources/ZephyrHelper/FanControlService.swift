@@ -4,6 +4,7 @@ import ZephyrCore
 final class FanControlService: NSObject, FanControlXPCProtocol {
     private let sessionID = UUID()
     private let controller = FanControlController.shared
+    static func bootstrap() { FanControlController.initialize() }
 
     func clientDisconnected() { controller.disconnected(sessionID) }
     func start() {}
@@ -19,34 +20,67 @@ final class FanControlService: NSObject, FanControlXPCProtocol {
     }
 }
 
-private final class FanControlController {
-    static let shared = FanControlController()
-    private let driver: FanHardwareDriver
-    private let now: () -> Date
-    private let queue = DispatchQueue(label: "dev.kirniy.zephyr.helper.state")
-    private var state = FanRecoveryState()
-    private var lastHeartbeat: Date?
-    private var timer: DispatchSourceTimer?
+private final class SMCRecoveryDriver: FanRecoveryDriver {
+    private let hardware = SMCFanDriver()
 
-    init(driver: FanHardwareDriver = SMCFanDriver(), now: @escaping () -> Date = Date.init) {
-        self.driver = driver
-        self.now = now
+    func snapshot() throws -> FanSnapshot {
+        let reading = try hardware.snapshot()
+        let temperature = try FanSafety.validateTemperature(hardware.hottestTemperature())
+        return FanSnapshot(currentRPM: reading.currentRPM, minimumRPM: reading.minimumRPM,
+                           maximumRPM: reading.maximumRPM, targetPercent: reading.targetPercent,
+                           automatic: reading.automatic, temperatureCelsius: temperature)
     }
+
+    func fanSnapshot() throws -> FanReadback {
+        let reading = try hardware.snapshot()
+        return FanReadback(currentRPM: reading.currentRPM, minimumRPM: reading.minimumRPM,
+                           maximumRPM: reading.maximumRPM, targetPercent: reading.targetPercent,
+                           automatic: reading.automatic)
+    }
+
+    func set(percent: Double) throws { try hardware.set(percent: percent) }
+    func restoreAutomatic() throws { try hardware.automatic() }
+    func automatic() throws -> Bool { try fanSnapshot().automatic }
+}
+
+final class FanControlController {
+    static let shared = FanControlController()
+
+    private let policy: FanRecoveryController
+    private let journalURL: URL
+    private let requireRootJournal: Bool
+    private let retryInterval: TimeInterval
+    private let queue = DispatchQueue(label: "dev.kirniy.zephyr.helper.state")
+    private var timer: DispatchSourceTimer?
+    private var journalPending = false
+
+    init(driver: FanRecoveryDriver? = nil, now: @escaping () -> Date = Date.init,
+         journalURL: URL = LeaseJournal.defaultURL, requireRootJournal: Bool = true,
+         retryInterval: TimeInterval = FanSafety.heartbeatInterval) {
+        self.journalURL = journalURL
+        self.requireRootJournal = requireRootJournal
+        self.retryInterval = retryInterval
+        policy = FanRecoveryController(driver: driver ?? SMCRecoveryDriver(), now: now)
+        queue.sync { recoverJournal(); armRetryTimerIfNeeded() }
+    }
+
+    deinit { timer?.cancel() }
+
+    static func initialize() { _ = shared }
 
     func disconnected(_ session: UUID) {
         queue.async { [weak self] in
-            guard let self, self.state.owns(session) else { return }
-            self.state.requestRestore(session)
-            self.lastHeartbeat = nil
-            self.armRetryTimer()
-            _ = self.attemptRestore(session)
+            guard let self, self.policy.state.owns(session) else { return }
+            self.policy.disconnect(session)
+            self.removeJournalIfAutomatic()
+            self.armRetryTimerIfNeeded()
         }
     }
 
     func snapshot(_ reply: @escaping (Data?, Error?) -> Void) {
         queue.async { [weak self] in
             guard let self else { reply(nil, FanControlError.unavailable); return }
-            do { reply(try JSONEncoder().encode(self.readSnapshot()), nil) }
+            do { reply(try JSONEncoder().encode(self.policy.driver.snapshot()), nil) }
             catch { reply(nil, error) }
         }
     }
@@ -55,37 +89,27 @@ private final class FanControlController {
         queue.async { [weak self] in
             guard let self else { reply(nil, FanControlError.unavailable); return }
             do {
-                let requested = try FanSafety.validate(percent: percent)
-                let wasOwner = self.state.owns(session)
-                guard self.state.claim(session), !self.state.restorePending else {
-                    throw FanControlError.unavailable
+                guard !self.journalPending else { throw FanControlError.unavailable }
+                var previousTarget: Double?
+                let snapshot = try self.policy.set(percent: percent, session: session) { before in
+                    previousTarget = self.policy.state.manual ? before.targetPercent : nil
+                    try LeaseJournal(sessionID: session, previousTargetPercent: previousTarget,
+                                     intendedPercent: try FanSafety.validate(percent: percent),
+                                     phase: .beforeWrite, processID: getpid()).write(to: self.journalURL, requireRootOwner: self.requireRootJournal)
                 }
-                let before = try self.readSnapshot()
-                guard !FanSafety.shouldRestoreAutomatic(snapshot: before, now: self.now(), lastHeartbeat: self.lastHeartbeat ?? self.now()) else {
-                    if !wasOwner { self.state.restoreConfirmed(session) }
-                    throw FanControlError.staleSensor
-                }
-                self.lastHeartbeat = self.now()
-                do {
-                    try self.driver.set(percent: requested)
-                    let after = try self.readSnapshot()
-                    guard !after.automatic,
-                          FanSafety.matchesRequestedPercent(after.targetPercent, expected: requested) else {
-                        throw FanControlError.hardwareFailure("Fan target did not verify after setting.")
-                    }
-                    self.state.didSetManual(session)
-                    self.armRetryTimer()
-                    reply(try JSONEncoder().encode(after), nil)
-                } catch {
-                    // A write may have succeeded before readback failed. Keep
-                    // ownership and retry automatic restoration until verified.
-                    self.state.requestRestore(session)
-                    self.armRetryTimer()
-                    _ = self.attemptRestore(session)
-                    reply(nil, error)
-                }
+                // The write and readback succeeded; retain the journal as an
+                // after-write record until automatic mode is confirmed.
+                try? LeaseJournal(sessionID: session, previousTargetPercent: previousTarget,
+                                  intendedPercent: try FanSafety.validate(percent: percent),
+                                  phase: .afterWrite, processID: getpid()).write(to: self.journalURL, requireRootOwner: self.requireRootJournal)
+                self.armRetryTimerIfNeeded()
+                reply(try JSONEncoder().encode(snapshot), nil)
             } catch {
-                if !self.state.manual && self.state.owns(session) { self.state.restoreConfirmed(session) }
+                if self.policy.state.owner == nil,
+                   let journal = try? LeaseJournal.read(from: self.journalURL, requireRootOwner: self.requireRootJournal), journal.sessionID == session {
+                    try? LeaseJournal.remove(at: self.journalURL, requireRootOwner: self.requireRootJournal)
+                }
+                self.armRetryTimerIfNeeded()
                 reply(nil, error)
             }
         }
@@ -93,75 +117,82 @@ private final class FanControlController {
 
     func restore(session: UUID, reply: @escaping (Data?, Error?) -> Void) {
         queue.async { [weak self] in
-            guard let self, self.state.owns(session) else { reply(nil, FanControlError.unavailable); return }
-            self.state.requestRestore(session)
-            self.armRetryTimer()
-            guard self.attemptRestore(session) else {
-                reply(nil, FanControlError.hardwareFailure("Automatic mode did not verify after restore."))
-                return
+            guard let self else { reply(nil, FanControlError.unavailable); return }
+            do {
+                let snapshot = try self.policy.restore(session)
+                try? LeaseJournal.remove(at: self.journalURL, requireRootOwner: self.requireRootJournal)
+                self.stopRetryTimer()
+                reply(try JSONEncoder().encode(snapshot), nil)
+            } catch {
+                self.armRetryTimerIfNeeded()
+                reply(nil, error)
             }
-            do { reply(try JSONEncoder().encode(self.readSnapshot()), nil) }
-            catch { reply(nil, error) }
         }
     }
 
     func heartbeat(session: UUID, reply: @escaping (Error?) -> Void) {
         queue.async { [weak self] in
-            guard let self, self.state.owns(session), self.state.manual, !self.state.restorePending else {
-                reply(nil)
-                return
-            }
-            self.lastHeartbeat = self.now()
+            self?.policy.heartbeat(session)
             reply(nil)
         }
     }
 
-    @discardableResult
-    private func attemptRestore(_ session: UUID) -> Bool {
-        guard state.owns(session), state.restorePending else { return false }
-        do {
-            try driver.automatic()
-            guard try driver.snapshot().automatic else { return false }
-            state.restoreConfirmed(session)
-            lastHeartbeat = nil
-            stopRetryTimer()
-            return true
-        } catch { return false }
-    }
-
     private func safetyTick() {
-        guard let owner = state.owner, state.manual || state.restorePending else {
+        if journalPending {
+            recoverJournal()
+            if journalPending { armRetryTimerIfNeeded(); return }
+        }
+        policy.tick()
+        removeJournalIfAutomatic()
+        armRetryTimerIfNeeded()
+    }
+
+    private func recoverJournal() {
+        guard let journal = try? LeaseJournal.read(from: journalURL, requireRootOwner: requireRootJournal) else {
+            // Never interpret malformed or untrusted data as hardware ownership.
+            journalPending = FileManager.default.fileExists(atPath: journalURL.path)
+            return
+        }
+        guard let snapshot = try? policy.driver.fanSnapshot() else {
+            journalPending = true
+            return
+        }
+        if snapshot.automatic {
+            try? LeaseJournal.remove(at: journalURL, requireRootOwner: requireRootJournal)
+            journalPending = false
+            return
+        }
+        let floor = max(0, min(100, snapshot.minimumRPM / snapshot.maximumRPM * 100))
+        let intended = FanSafety.matchesRequestedPercent(snapshot.targetPercent, expected: max(journal.intendedPercent, floor))
+        let previous = journal.phase == .beforeWrite && (journal.previousTargetPercent.map {
+            FanSafety.matchesRequestedPercent(snapshot.targetPercent, expected: $0)
+        } ?? false)
+        guard intended || previous else {
+            // Another controller changed the target. Relinquish our obsolete
+            // record without altering its setting or later claiming a coincidence.
+            try? LeaseJournal.remove(at: journalURL, requireRootOwner: requireRootJournal)
+            journalPending = false
+            return
+        }
+        policy.recoverOwnedLease(journal.sessionID)
+        journalPending = false
+        policy.tick()
+        removeJournalIfAutomatic()
+    }
+
+    private func removeJournalIfAutomatic() {
+        guard policy.state.owner == nil, !journalPending else { return }
+        try? LeaseJournal.remove(at: journalURL, requireRootOwner: requireRootJournal)
+    }
+
+    private func armRetryTimerIfNeeded() {
+        guard journalPending || (policy.state.owner != nil && (policy.state.manual || policy.state.restorePending)) else {
             stopRetryTimer()
             return
         }
-        if state.restorePending {
-            _ = attemptRestore(owner)
-            return
-        }
-        guard let snapshot = try? readSnapshot() else {
-            state.requestRestore(owner)
-            _ = attemptRestore(owner)
-            return
-        }
-        if FanSafety.shouldRestoreAutomatic(snapshot: snapshot, now: now(), lastHeartbeat: lastHeartbeat) {
-            state.requestRestore(owner)
-            _ = attemptRestore(owner)
-        }
-    }
-
-    private func readSnapshot() throws -> FanSnapshot {
-        let reading = try driver.snapshot()
-        let temperature = try FanSafety.validateTemperature(driver.hottestTemperature())
-        return FanSnapshot(currentRPM: reading.currentRPM, minimumRPM: reading.minimumRPM,
-                           maximumRPM: reading.maximumRPM, targetPercent: reading.targetPercent,
-                           automatic: reading.automatic, temperatureCelsius: temperature)
-    }
-
-    private func armRetryTimer() {
         guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + FanSafety.heartbeatInterval,
-                       repeating: FanSafety.heartbeatInterval)
+        timer.schedule(deadline: .now() + retryInterval, repeating: retryInterval)
         timer.setEventHandler { [weak self] in self?.safetyTick() }
         timer.resume()
         self.timer = timer

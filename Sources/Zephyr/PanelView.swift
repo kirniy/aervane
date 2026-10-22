@@ -1,23 +1,28 @@
 import AppKit
 import ZephyrCore
 
+/// One compact glass panel. Frames come from a single `arrange` pass on a
+/// 4/8 pt grid, so the window height can never disagree with the layout.
 final class PanelView: FlippedView, NSTextFieldDelegate {
     let model: AppModel
     var resize: ((CGFloat) -> Void)?
     var quit: (() -> Void)?
-    private let titleLabel = label("Aervane", size: 16, weight: .semibold)
-    private let temperature = label("—", size: 64, weight: .light)
-    private let unit = label("°C", size: 25, weight: .regular, color: .secondaryLabelColor)
-    private let temperatureCaption = label("CPU average", size: 12, color: .secondaryLabelColor)
-    private let health = label("Reading sensors…", size: 12, color: .secondaryLabelColor)
+    var preferredFirstResponder: NSView { slider }
+    private var needsSetup: Bool { !model.helperReady || model.competingApp != nil }
+    private let titleLabel = label("Aervane", size: 13, weight: .semibold)
+    private let temperature = label("—", size: 44, weight: .light)
+    private let unit = label("°C", size: 17, color: .secondaryLabelColor)
+    private let temperatureCaption = label("CPU average", size: 11, color: .secondaryLabelColor)
+    private let health = label("Reading sensors…", size: 11, color: .secondaryLabelColor)
     private let chart = TemperatureHistory()
-    private let speedLabel = label("Cooling", size: 14, weight: .medium)
-    private let percent = label("—%", size: 30, weight: .medium)
+    private let speedLabel = label("Fan", size: 13, weight: .semibold)
+    private let percent = label("—%", size: 28, weight: .medium)
+    private let stateLabel = label("", size: 11, weight: .medium, color: .secondaryLabelColor)
     private let actual = label("", size: 11, color: .secondaryLabelColor)
     private let slider = PercentSlider(frame: .zero)
-    private let quietLabel = label("Quieter", size: 11, color: .secondaryLabelColor)
-    private let coolLabel = label("Cooler", size: 11, color: .secondaryLabelColor)
-    private let note = label("", size: 11, color: .secondaryLabelColor)
+    private let floorLabel = label("", size: 11, color: .secondaryLabelColor)
+    private let maxLabel = label("100%", size: 11, color: .secondaryLabelColor)
+    private let presetsTitle = label("Presets", size: 11, weight: .semibold, color: .secondaryLabelColor)
     private let footer = label("", size: 11, color: .secondaryLabelColor)
     private let message = NSTextField(wrappingLabelWithString: "")
     private var presetButtons: [SoftButton] = []
@@ -25,146 +30,333 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
     private var settingsOpen = false
     private var editorViews: [NSView] = []
     private var settingsViews: [NSView] = []
+    private var dividers: [CGFloat] = []
+    private var layoutKey = ""
+    /// A value the user asked for that the model has not confirmed yet. Keeps
+    /// the thumb from snapping back while the helper write is in flight.
+    private var hold: (value: Double, until: Date)?
     private lazy var settingsButton = SoftButton("", glyph: .settings) { [weak self] in self?.toggleSettings() }
     private lazy var autoButton = SoftButton("Auto") { [weak self] in self?.model.restore() }
-    private lazy var manualButton = SoftButton("Manual") { [weak self] in guard let self else { return }; if self.model.helperReady { self.model.setPercent(self.model.shownPercent) } else { self.model.enableControl() } }
+    private lazy var manualButton = SoftButton("Manual") { [weak self] in guard let self else { return }; self.request(self.model.shownPercent, animated: false) }
     private lazy var editButton = SoftButton("Edit") { [weak self] in self?.toggleEditor() }
-    private lazy var enableButton = SoftButton("Enable fan control", glyph: .airflow) { [weak self] in self?.model.enableControl() }
+    private lazy var enableButton = SoftButton("Set up fan control", glyph: .airflow) { [weak self] in self?.model.enableControl() }
 
     init(model: AppModel) {
-        self.model = model; super.init(frame: .init(x: 0, y: 0, width: 380, height: 458))
+        self.model = model; super.init(frame: .init(x: 0, y: 0, width: 380, height: 420))
         wantsLayer = true
-        [titleLabel, temperature, unit, temperatureCaption, health, chart, speedLabel, percent, actual, slider, quietLabel, coolLabel, note, footer, message, settingsButton, autoButton, manualButton, editButton, enableButton].forEach(addSubview)
-        temperature.font = Theme.rounded(64, .light); percent.font = Theme.number(30, .medium)
-        message.font = Theme.font(11); message.textColor = .systemOrange; message.maximumNumberOfLines = 3
-        settingsButton.setAccessibilityLabel("Settings"); autoButton.setAccessibilityLabel("Restore automatic fan control"); manualButton.setAccessibilityLabel("Manual fan control")
-        coolLabel.alignment = .right; percent.alignment = .right; actual.alignment = .right
-        slider.preview = { [weak self] value in self?.percent.stringValue = "\(Int(value))%"; self?.note.stringValue = value == 100 ? "Maximum cooling" : "Release to apply" }
-        slider.commit = { [weak self] value in self?.model.setPercent(value) }
-        makePresets(); update()
+        [titleLabel, temperature, unit, temperatureCaption, health, chart, speedLabel, percent, stateLabel, actual, slider, floorLabel, maxLabel, presetsTitle, footer, message, settingsButton, autoButton, manualButton, editButton, enableButton].forEach(addSubview)
+        temperature.font = Theme.rounded(44, .light); unit.font = Theme.rounded(17); percent.font = Theme.number(28, .medium)
+        message.font = Theme.font(11); message.textColor = Theme.caution; message.maximumNumberOfLines = 3
+        [stateLabel, actual, maxLabel, health].forEach { $0.alignment = .right }
+        settingsButton.quiet = true; editButton.quiet = true; enableButton.prominent = true
+        settingsButton.setAccessibilityLabel("Settings"); settingsButton.toolTip = "Settings"
+        autoButton.setAccessibilityLabel("Restore automatic fan control"); manualButton.setAccessibilityLabel("Manual fan control")
+        slider.preview = { [weak self] value in self?.showReadout(value) }
+        slider.commit = { [weak self] value in self?.request(value, animated: false) }
+        update()
     }
     required init?(coder: NSCoder) { fatalError() }
-    var desiredHeight: CGFloat { 458 + (model.helperReady ? 0 : 48) + (editing ? CGFloat(model.presets.count * 44 + 54) : 0) + (settingsOpen ? 212 : 0) + (model.error == nil ? 0 : 54) }
-    override func layout() {
-        super.layout()
-        titleLabel.frame = .init(x: 50, y: 24, width: 210, height: 22)
-        settingsButton.frame = .init(x: 326, y: 18, width: 32, height: 32)
-        temperature.frame = .init(x: 24, y: 72, width: 144, height: 80)
-        unit.frame = .init(x: 165, y: 88, width: 48, height: 36)
-        temperatureCaption.frame = .init(x: 28, y: 153, width: 200, height: 18)
-        health.frame = .init(x: 238, y: 94, width: 116, height: 20)
-        chart.frame = .init(x: 238, y: 119, width: 112, height: 42)
-        speedLabel.frame = .init(x: 26, y: 206, width: 100, height: 20)
-        autoButton.frame = .init(x: 225, y: 198, width: 57, height: 30)
-        manualButton.frame = .init(x: 286, y: 198, width: 68, height: 30)
-        percent.frame = .init(x: 248, y: 242, width: 108, height: 40)
-        actual.frame = .init(x: 230, y: 284, width: 124, height: 16)
-        quietLabel.frame = .init(x: 26, y: 257, width: 100, height: 18)
-        slider.frame = .init(x: 21, y: 300, width: 338, height: 48)
-        note.frame = .init(x: 26, y: 353, width: 245, height: 18)
-        coolLabel.frame = .init(x: 294, y: 353, width: 60, height: 18)
-        let width = model.presets.isEmpty ? 0 : (278.0 - CGFloat(max(0, model.presets.count - 1)) * 6) / CGFloat(model.presets.count)
-        for (i, button) in presetButtons.enumerated() { button.frame = .init(x: 26 + CGFloat(i) * (width + 6), y: 385, width: width, height: 33) }
-        editButton.frame = .init(x: 310, y: 385, width: 44, height: 33)
-        var y: CGFloat = 432
-        if !model.helperReady { enableButton.frame = .init(x: 26, y: y, width: 328, height: 33); y += 48 }
-        if editing { layoutEditor(at: y); y += CGFloat(model.presets.count * 44 + 54) }
-        if settingsOpen { layoutSettings(at: y); y += 212 }
-        if model.error != nil { message.frame = .init(x: 26, y: y, width: 328, height: 48); y += 54 }
-        footer.frame = .init(x: 26, y: y, width: 328, height: 16)
+
+    var desiredHeight: CGFloat { arrange(apply: false) }
+    func prepareForHiding() {
+        endTextEditing()
+        slider.prepareForHiding()
+        for button in subviews.compactMap({ $0 as? SoftButton }) { button.resetHover() }
+    }
+    override func layout() { super.layout(); arrange(apply: true) }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); needsLayout = true }
+
+    // MARK: Layout
+
+    @discardableResult private func arrange(apply: Bool) -> CGFloat {
+        let m: CGFloat = 20, w = bounds.width - 2 * m, gap: CGFloat = 8
+        var marks: [CGFloat] = []
+        func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) {
+            if apply { view.frame = NSRect(x: x, y: y, width: max(0, width), height: height) }
+        }
+        var y: CGFloat = 16
+        // Header: mark, name, settings.
+        put(titleLabel, m + 24, y + 5, 200, 18)
+        put(settingsButton, m + w - 28, y, 28, 28)
+        y += 28 + 12
+        // Temperature: the number leads; trend and plain-language health trail.
+        let numberWidth = ceil(temperature.attributedStringValue.size().width) + 4
+        put(temperature, m - 2, y, numberWidth, 52)
+        // Cap-top align the unit with the number, from the actual font metrics.
+        let numberFont = temperature.font ?? Theme.rounded(44, .light), unitFont = unit.font ?? Theme.rounded(17)
+        let unitY = (y + (numberFont.ascender - numberFont.capHeight) - (unitFont.ascender - unitFont.capHeight)).rounded()
+        put(unit, m - 2 + numberWidth, unitY, 40, 22)
+        put(temperatureCaption, m, y + 52, 180, 16)
+        put(chart, m + w - 128, y + 8, 128, 36)
+        put(health, m + w - 160, y + 52, 160, 16)
+        y += 68 + 16
+        marks.append(y); y += 16
+        // Fan: mode, readout, slider, scale.
+        put(speedLabel, m, y + 4, 80, 18)
+        put(manualButton, m + w - 68, y, 68, 26)
+        put(autoButton, m + w - 68 - 4 - 56, y, 56, 26)
+        y += 26 + 12
+        put(percent, m - 1, y, 120, 34)
+        put(stateLabel, m + 120, y + 2, w - 120, 16)
+        put(actual, m + 120, y + 18, w - 120, 16)
+        y += 34 + 4
+        put(slider, m - 16, y, w + 32, 32)          // hit area spills into the margins
+        y += 32
+        put(floorLabel, m, y, w / 2, 14); put(maxLabel, m + w / 2, y, w / 2, 14)
+        y += 14 + 16
+        // Presets wrap into rows of at most three: 1–3 → one row, 4 → 2×2,
+        // 5 → 3+2, 6 → 3×2. Short last rows stretch to the full width.
+        put(presetsTitle, m, y + 4, 120, 16); put(editButton, m + w - 56, y, 56, 24)
+        y += 24 + gap
+        let count = presetButtons.count
+        if count > 0 {
+            let perRow = count <= 3 ? count : count == 4 ? 2 : 3
+            let rows = (count + perRow - 1) / perRow
+            for row in 0..<rows {
+                let first = row * perRow, items = min(perRow, count - first)
+                let width = (w - CGFloat(items - 1) * gap) / CGFloat(items)
+                for i in 0..<items { put(presetButtons[first + i], (m + CGFloat(i) * (width + gap)).rounded(), y + CGFloat(row) * (32 + gap), width.rounded(.down), 32) }
+            }
+            y += CGFloat(rows) * 32 + CGFloat(rows - 1) * gap + 16
+        }
+        if editing {
+            let rows = max(0, (editorViews.count - 1) / 4)
+            if apply { layoutEditor(at: y, margin: m, width: w) }
+            y += CGFloat(rows) * 36 + 28 + 16
+        }
+        if needsSetup { put(enableButton, m, y, w, 32); y += 32 + 16 }
+        if settingsOpen {
+            marks.append(y - 8)
+            if apply { layoutSettings(at: y + 8, margin: m, width: w) }
+            y += 8 + 166 + 16
+        }
+        if model.error != nil {
+            let height = min(48, max(16, ceil(message.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: w, height: 200)).height ?? 32)))
+            put(message, m, y, w, height); y += height + 12
+        }
+        put(footer, m, y, w, 14); y += 14 + 16
+        if apply && marks != dividers { dividers = marks; needsDisplay = true }
+        return y
     }
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        Glyphs.image(.airflow, size: 18, color: Theme.accent).draw(in: .init(x: 26, y: 25, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        Theme.ink.withAlphaComponent(0.09).setFill(); NSRect(x: 26, y: 187, width: 328, height: 0.5).fill()
+        Glyphs.image(.airflow, size: 16, color: Theme.accent).draw(in: .init(x: 20, y: 22, width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        let hairline = 1 / max(1, window?.backingScaleFactor ?? 2)
+        Theme.hairline.setFill(); for y in dividers { NSRect(x: 20, y: y, width: bounds.width - 40, height: hairline).fill() }
     }
+
+    // MARK: State
+
     func update() {
         temperature.stringValue = model.temperatureText; unit.stringValue = model.temperatureUnit
         temperatureCaption.stringValue = model.selectedSensor == "CPU" ? "CPU average" : model.selectedSensor == "GPU" ? "GPU temperature" : "Warmer of CPU & GPU"
         let temp = model.displayTemperature
-        health.stringValue = model.stale ? "No live reading" : (temp ?? 0) >= 90 ? "Running hot" : (temp ?? 0) >= 75 ? "Working hard" : "Comfortable"
-        health.textColor = (temp ?? 0) >= 90 ? .systemOrange : Theme.secondary
+        health.stringValue = model.stale ? "No live reading" : temp.map { $0 >= 90 ? "Running hot" : $0 >= 75 ? "Working hard" : "Comfortable" } ?? "Reading sensors…"
+        health.textColor = !model.stale && (temp ?? 0) >= 90 ? Theme.caution : Theme.secondary
         chart.samples = model.history
-        if !slider.dragging { percent.stringValue = "\(Int(model.shownPercent.rounded()))%"; slider.percent = model.shownPercent }
+
         slider.minimumPercent = model.minimumPercent
-        slider.isEnabled = !model.stale && !model.busy
-        actual.stringValue = "Actual \(Int(model.actualPercent.rounded()))%"
-        quietLabel.stringValue = model.pendingPercent != nil ? "Preview · not applied" : model.sample?.automatic == true ? "Managed by macOS" : model.ownsControl ? "Your fan speed" : "Current fan speed"
-        note.stringValue = model.pendingPercent != nil ? "Enable control to apply this speed" : model.minimumPercent > 0 ? "\(Int(model.minimumPercent))% hardware minimum" : "Fan stop supported"
-        autoButton.selected = model.sample?.automatic == true && model.pendingPercent == nil; autoButton.isEnabled = model.ownsControl || model.pendingPercent != nil
-        manualButton.selected = model.ownsControl; manualButton.isEnabled = !model.busy
-        for (i, button) in presetButtons.enumerated() {
-            button.isHidden = false; button.isEnabled = slider.isEnabled
-            button.selected = model.ownsControl && abs(model.shownPercent - max(model.minimumPercent, model.presets[i].percent)) < 1.5
+        slider.isUnavailable = model.stale
+        slider.detents = model.presets.map { max(model.minimumPercent, $0.percent) }
+        if let held = hold, !model.busy, abs(model.shownPercent - held.value) < 1.5 || model.error != nil || held.until < Date() { hold = nil }
+        // A sample refresh never moves the thumb under the user's pointer/keys.
+        if !slider.isInteracting {
+            slider.isEnabled = !model.stale && !model.busy
+            let value = (hold?.value ?? model.shownPercent).rounded()
+            if abs(slider.percent - value) >= 0.5 { slider.setPercent(value, animated: window?.isVisible == true) }
+            showReadout(slider.percent)
         }
-        enableButton.isHidden = model.helperReady; enableButton.isEnabled = !model.busy
-        enableButton.title = model.busy ? "Connecting…" : model.pendingPercent.map { "Enable & apply \(Int($0))%" } ?? "Enable fan control"
-        editButton.title = editing ? "Done" : "Edit"; settingsButton.selected = settingsOpen
+        floorLabel.stringValue = model.sample == nil ? "" : model.minimumPercent > 0 ? "\(Int(model.minimumPercent))% hardware minimum" : "0% · fan can stop"
+
+        let previewing = model.pendingPercent != nil
+        autoButton.selected = model.sample?.automatic == true && !model.ownsControl && !previewing
+        autoButton.isEnabled = !model.busy
+        manualButton.selected = model.ownsControl || previewing
+        manualButton.isEnabled = !model.stale && !model.busy
+        syncPresets()
+        editButton.title = editing ? "Done" : "Edit"; editButton.setAccessibilityLabel(editing ? "Finish editing presets" : "Edit presets")
+        settingsButton.selected = settingsOpen
+
+        enableButton.isHidden = !needsSetup; enableButton.isEnabled = !model.busy
+        enableButton.title = model.busy && !model.helperReady ? "Connecting…" : model.pendingPercent.map { "Set up & apply \(Int($0.rounded()))%" } ?? "Set up fan control"
+        enableButton.setAccessibilityLabel(enableButton.title)
         message.stringValue = model.error ?? ""; message.isHidden = model.error == nil
-        if let deadline = model.controlDeadline, model.ownsControl { footer.stringValue = "Returns to Auto in \(max(1, Int(deadline.timeIntervalSinceNow / 60))) min · protected by macOS" }
-        else { footer.stringValue = model.helperReady ? "Live readings · automatic on quit" : "Live readings · no background network activity" }
-        needsLayout = true; needsDisplay = true; resize?(desiredHeight)
+        if let deadline = model.controlDeadline, model.ownsControl { footer.stringValue = "Returns to Auto in \(max(1, Int(deadline.timeIntervalSinceNow / 60))) min" }
+        else { footer.stringValue = model.helperReady ? "Live readings · Auto restored on quit" : "Live readings · nothing applied until setup" }
+
+        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorViews.count)|\(presetButtons.count)|\(model.error ?? "")|\(temperature.stringValue)\(unit.stringValue)"
+        if key != layoutKey { layoutKey = key; needsLayout = true }
+        resize?(desiredHeight)
     }
-    private func makePresets() {
-        presetButtons.forEach { $0.removeFromSuperview() }
-        presetButtons = model.presets.enumerated().map { i, preset in
-            let button = SoftButton(preset.name, glyph: model.presets.count <= 3 ? ([Glyph.quiet, .balance, .boost][min(i, 2)]) : nil) { [weak self] in self?.model.setPercent(preset.percent) }
-            button.toolTip = "\(preset.name) · \(Int(preset.percent))%"; addSubview(button); return button
+
+    /// Big number, status and (only when it differs) the measured speed.
+    private func showReadout(_ value: Double) {
+        let shown = Int(value.rounded())
+        percent.stringValue = model.sample == nil ? "—%" : "\(shown)%"
+        let (text, color) = statusLine()
+        stateLabel.stringValue = text; stateLabel.textColor = color
+        let measured = Int(model.actualPercent.rounded())
+        let informative = model.sample != nil && !model.stale && abs(measured - shown) >= 3
+        actual.stringValue = !informative ? "" : model.ownsControl && model.pendingPercent == nil && !slider.isInteracting ? "Actual \(measured)% · settling" : "Fan now \(measured)%"
+        for (i, button) in presetButtons.enumerated() where model.presets.indices.contains(i) {
+            button.selected = (model.ownsControl || model.pendingPercent != nil || slider.isInteracting) && abs(value - effectivePercent(model.presets[i])) < 0.5
         }
+    }
+    private func statusLine() -> (String, NSColor) {
+        if model.sample == nil { return ("Reading sensors…", Theme.secondary) }
+        if model.stale { return ("Waiting for a fresh reading", Theme.caution) }
+        if slider.isInteracting {
+            if !model.helperReady { return ("Preview · not applied", Theme.caution) }
+            return (slider.dragging ? "Release to apply" : "Applying…", Theme.accent)
+        }
+        if model.busy { return (model.helperReady ? "Applying…" : "Connecting…", Theme.secondary) }
+        if model.pendingPercent != nil { return ("Preview · not applied", Theme.caution) }
+        if model.ownsControl { return ("Manual · applied", Theme.accent) }
+        if model.sample?.automatic == true { return ("Automatic", Theme.secondary) }
+        return ("Set by another controller", Theme.secondary)
+    }
+    private func effectivePercent(_ preset: FanPreset) -> Double { max(model.minimumPercent, min(100, preset.percent)).rounded() }
+
+    /// Single path for every user-requested speed (slider release, keys,
+    /// presets, Manual). Before setup the model stores it as a preview.
+    private func request(_ value: Double, animated: Bool) {
+        guard !model.busy else { return }
+        let target = max(model.minimumPercent, min(100, value.rounded()))
+        if !model.stale {
+            hold = (target, Date().addingTimeInterval(3))
+            if animated { slider.setPercent(target, animated: true, celebrate: true) }
+        }
+        model.setPercent(target)
+    }
+
+    // MARK: Presets
+
+    private func syncPresets() {
+        if presetButtons.count != model.presets.count {
+            presetButtons.forEach { $0.removeFromSuperview() }
+            presetButtons = model.presets.indices.map { i in
+                let button = SoftButton("") { [weak self] in self?.applyPreset(at: i) }
+                addSubview(button); return button
+            }
+        }
+        for (i, button) in presetButtons.enumerated() {
+            let preset = model.presets[i], figure = "\(Int(effectivePercent(preset)))%"
+            if button.title != preset.name { button.title = preset.name }
+            button.detail = figure; button.toolTip = "\(preset.name) · \(figure)"
+            button.setAccessibilityLabel("\(preset.name) preset, \(figure)")
+            button.isEnabled = !model.stale && !model.busy
+        }
+        showReadout(slider.percent)
+    }
+    private func applyPreset(at i: Int) {
+        guard model.presets.indices.contains(i) else { return }
+        request(model.presets[i].percent, animated: true)
+    }
+    /// Ends any in-progress text edit so its value is saved before the editor
+    /// or settings are rebuilt.
+    private func endTextEditing() {
+        guard let window, window.firstResponder is NSText else { return }
+        window.makeFirstResponder(nil)
     }
     private func toggleEditor() {
-        editing.toggle(); settingsOpen = false; settingsViews.forEach { $0.removeFromSuperview() }; settingsViews.removeAll()
+        endTextEditing()
+        editing.toggle(); if editing { settingsOpen = false; rebuildSettings() }
         rebuildEditor(); update()
     }
     private func rebuildEditor() {
         editorViews.forEach { $0.removeFromSuperview() }; editorViews.removeAll()
         guard editing else { return }
         for (i, preset) in model.presets.enumerated() {
-            let name = NSTextField(string: preset.name); name.font = Theme.font(12); name.bezelStyle = .roundedBezel; name.tag = i * 10; name.delegate = self; name.setAccessibilityLabel("Preset \(i + 1) name")
+            let name = NSTextField(string: preset.name); name.font = Theme.font(12); name.bezelStyle = .roundedBezel; name.placeholderString = "Name"; name.tag = i * 10; name.delegate = self; name.setAccessibilityLabel("Preset \(i + 1) name")
             let value = NSTextField(string: "\(Int(preset.percent))"); value.font = Theme.number(12); value.alignment = .right; value.bezelStyle = .roundedBezel; value.tag = i * 10 + 1; value.delegate = self; value.setAccessibilityLabel("Preset \(i + 1) percentage")
             let suffix = label("%", size: 12, color: .secondaryLabelColor)
-            let remove = SoftButton("", glyph: .close) { [weak self] in guard let self else { return }; self.model.presets.remove(at: i); self.model.savePresets(); self.makePresets(); self.rebuildEditor(); self.update() }; remove.setAccessibilityLabel("Delete \(preset.name) preset")
+            let remove = SoftButton("", glyph: .close) { [weak self] in self?.removePreset(at: i) }
+            remove.quiet = true; remove.setAccessibilityLabel("Delete \(preset.name) preset"); remove.toolTip = "Delete"
             [name, value, suffix, remove].forEach { editorViews.append($0); addSubview($0) }
         }
-        let add = SoftButton("Add preset", glyph: .plus) { [weak self] in guard let self, self.model.presets.count < 6 else { return }; self.model.presets.append(FanPreset(name: "Custom", percent: 50)); self.model.savePresets(); self.makePresets(); self.rebuildEditor(); self.update() }; add.isEnabled = model.presets.count < 6
+        let full = model.presets.count >= 6
+        let add = SoftButton("Add current speed", glyph: .plus) { [weak self] in self?.addPreset() }
+        add.quiet = true; add.isEnabled = !full; add.toolTip = full ? "Up to six presets" : nil
         editorViews.append(add); addSubview(add)
     }
-    private func layoutEditor(at y: CGFloat) {
-        for i in model.presets.indices {
-            let row = y + CGFloat(i) * 44
-            editorViews[i * 4].frame = .init(x: 26, y: row, width: 180, height: 28)
-            editorViews[i * 4 + 1].frame = .init(x: 216, y: row, width: 65, height: 28)
-            editorViews[i * 4 + 2].frame = .init(x: 285, y: row + 5, width: 18, height: 20)
-            editorViews[i * 4 + 3].frame = .init(x: 322, y: row, width: 32, height: 28)
+    private func layoutEditor(at y: CGFloat, margin m: CGFloat, width w: CGFloat) {
+        let rows = max(0, (editorViews.count - 1) / 4)
+        let removeX = m + w - 28, suffixX = removeX - 8 - 14, valueX = suffixX - 2 - 52
+        for i in 0..<rows {
+            let row = y + CGFloat(i) * 36
+            editorViews[i * 4].frame = .init(x: m, y: row + 2, width: valueX - 8 - m, height: 24)
+            editorViews[i * 4 + 1].frame = .init(x: valueX, y: row + 2, width: 52, height: 24)
+            editorViews[i * 4 + 2].frame = .init(x: suffixX, y: row + 6, width: 14, height: 16)
+            editorViews[i * 4 + 3].frame = .init(x: removeX, y: row, width: 28, height: 28)
         }
-        editorViews.last?.frame = .init(x: 26, y: y + CGFloat(model.presets.count) * 44, width: 130, height: 30)
+        editorViews.last?.frame = .init(x: m - 4, y: y + CGFloat(rows) * 36, width: 150, height: 28)
+    }
+    private func removePreset(at i: Int) {
+        endTextEditing()
+        guard model.presets.indices.contains(i) else { return }
+        model.presets.remove(at: i); model.savePresets(); rebuildEditor(); update()
+    }
+    private func addPreset() {
+        endTextEditing()
+        guard model.presets.count < 6 else { return }
+        model.presets.append(FanPreset(name: "Custom", percent: max(model.minimumPercent, slider.percent.rounded())))
+        model.savePresets(); rebuildEditor(); update()
+        if let field = editorViews.dropLast().dropLast(3).last as? NSTextField { window?.makeFirstResponder(field); field.currentEditor()?.selectAll(nil) }
+    }
+    /// Saves as you type so closing the editor, opening Settings or hiding
+    /// the panel never loses an edit. Buttons update live.
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField, model.presets.indices.contains(field.tag / 10) else { return }
+        let i = field.tag / 10
+        if field.tag % 10 == 0 {
+            let name = String(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+            guard !name.isEmpty else { return }
+            model.presets[i].name = name
+        } else {
+            guard let n = Double(field.stringValue.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)), n.isFinite else { return }
+            model.presets[i].percent = max(0, min(100, n.rounded()))
+        }
+        model.savePresets()
     }
     func controlTextDidEndEditing(_ obj: Notification) {
         guard let field = obj.object as? NSTextField, model.presets.indices.contains(field.tag / 10) else { return }; let i = field.tag / 10
-        if field.tag % 10 == 0 { let value = String(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20)); model.presets[i].name = value.isEmpty ? "Custom" : value }
-        else { if let n = Double(field.stringValue), n.isFinite { model.presets[i].percent = max(0, min(100, n.rounded())) }; field.stringValue = "\(Int(model.presets[i].percent))" }
-        model.savePresets(); makePresets(); update()
+        if field.tag % 10 == 0 {
+            let value = String(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+            model.presets[i].name = value.isEmpty ? "Custom" : value; field.stringValue = model.presets[i].name
+        } else {
+            if let n = Double(field.stringValue.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)), n.isFinite { model.presets[i].percent = max(model.minimumPercent, min(100, n.rounded())) }
+            field.stringValue = "\(Int(model.presets[i].percent))"
+        }
+        model.savePresets(); update()
     }
+
+    // MARK: Settings
+
     private func toggleSettings() {
-        settingsOpen.toggle(); editing = false; rebuildEditor(); settingsViews.forEach { $0.removeFromSuperview() }; settingsViews.removeAll()
-        if settingsOpen {
-            let sensorTitle = label("Menu bar temperature", size: 12, weight: .medium)
-            let sensors = NSSegmentedControl(labels: ["CPU", "GPU", "Warmer"], trackingMode: .selectOne, target: self, action: #selector(sensorChanged)); sensors.selectedSegment = ["CPU", "GPU", "Warmer"].firstIndex(of: model.selectedSensor) ?? 0; sensors.controlSize = .small
-            let units = NSButton(checkboxWithTitle: "Use Fahrenheit", target: self, action: #selector(unitsChanged)); units.state = model.fahrenheit ? .on : .off
-            let login = NSButton(checkboxWithTitle: "Open at login", target: self, action: #selector(loginChanged)); login.state = model.loginEnabled ? .on : .off
-            let eco = NSButton(checkboxWithTitle: "Low-power polling when closed", target: self, action: #selector(ecoChanged)); eco.state = model.lowPower ? .on : .off
-            let repo = SoftButton("Source code") { NSWorkspace.shared.open(URL(string: "https://github.com/kirniy/aervane")!) }
-            let quitButton = SoftButton("Quit Aervane", glyph: .power) { [weak self] in self?.quit?() }
-            settingsViews = [sensorTitle, sensors, units, login, eco, repo, quitButton]; settingsViews.forEach(addSubview)
-        }; update()
+        endTextEditing()
+        settingsOpen.toggle(); if settingsOpen { editing = false; rebuildEditor() }
+        rebuildSettings(); update()
     }
-    private func layoutSettings(at y: CGFloat) {
+    private func rebuildSettings() {
+        settingsViews.forEach { $0.removeFromSuperview() }; settingsViews.removeAll()
+        guard settingsOpen else { return }
+        let sensorTitle = label("Menu bar temperature", size: 11, weight: .semibold, color: .secondaryLabelColor)
+        let sensors = NSSegmentedControl(labels: ["CPU", "GPU", "Warmer"], trackingMode: .selectOne, target: self, action: #selector(sensorChanged)); sensors.selectedSegment = ["CPU", "GPU", "Warmer"].firstIndex(of: model.selectedSensor) ?? 0; sensors.controlSize = .small; sensors.segmentDistribution = .fillEqually
+        let units = NSButton(checkboxWithTitle: "Use Fahrenheit", target: self, action: #selector(unitsChanged)); units.state = model.fahrenheit ? .on : .off
+        let login = NSButton(checkboxWithTitle: "Open at login", target: self, action: #selector(loginChanged)); login.state = model.loginEnabled ? .on : .off
+        let eco = NSButton(checkboxWithTitle: "Low-power polling when closed", target: self, action: #selector(ecoChanged)); eco.state = model.lowPower ? .on : .off
+        [units, login, eco].forEach { $0.font = Theme.font(12) }
+        let repo = SoftButton("Source code") { NSWorkspace.shared.open(URL(string: "https://github.com/kirniy/aervane")!) }; repo.quiet = true
+        let quitButton = SoftButton("Quit Aervane", glyph: .power) { [weak self] in self?.quit?() }
+        settingsViews = [sensorTitle, sensors, units, login, eco, repo, quitButton]; settingsViews.forEach(addSubview)
+    }
+    private func layoutSettings(at y: CGFloat, margin m: CGFloat, width w: CGFloat) {
         guard settingsViews.count == 7 else { return }
-        settingsViews[0].frame = .init(x: 26, y: y, width: 230, height: 20)
-        settingsViews[1].frame = .init(x: 26, y: y + 26, width: 328, height: 28)
-        for i in 2...4 { settingsViews[i].frame = .init(x: 26, y: y + 62 + CGFloat(i - 2) * 30, width: 328, height: 24) }
-        settingsViews[5].frame = .init(x: 26, y: y + 162, width: 130, height: 30)
-        settingsViews[6].frame = .init(x: 204, y: y + 162, width: 150, height: 30)
+        settingsViews[0].frame = .init(x: m, y: y, width: w, height: 16)
+        settingsViews[1].frame = .init(x: m, y: y + 22, width: w, height: 24)
+        for i in 2...4 { settingsViews[i].frame = .init(x: m, y: y + 58 + CGFloat(i - 2) * 24, width: w, height: 20) }
+        settingsViews[5].frame = .init(x: m - 4, y: y + 138, width: 110, height: 28)
+        settingsViews[6].frame = .init(x: m + w - 132, y: y + 138, width: 132, height: 28)
     }
     @objc private func sensorChanged(_ sender: NSSegmentedControl) { model.selectedSensor = ["CPU", "GPU", "Warmer"][sender.selectedSegment]; model.history.removeAll() }
     @objc private func unitsChanged(_ sender: NSButton) { model.fahrenheit = sender.state == .on }

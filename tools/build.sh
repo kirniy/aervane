@@ -9,6 +9,8 @@ fi
 
 CONFIG=release
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+SIGN_TIMESTAMP=none
+if [[ -n "${NOTARY_PROFILE:-}" ]]; then SIGN_TIMESTAMP=enabled; fi
 APP_ID="dev.kirniy.aervane"
 HELPER_ID="dev.kirniy.aervane.helper"
 BUILD_DIR="$ROOT/.build"
@@ -39,13 +41,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
-  <key>SMPrivilegedExecutables</key><dict>
-    <key>dev.kirniy.aervane.helper</key><string>identifier dev.kirniy.aervane.helper</string>
-  </dict>
 </dict></plist>
 PLIST
 
-codesign --force --identifier "$HELPER_ID" --options runtime --timestamp=none --sign "$SIGN_IDENTITY" "$APP/Contents/Library/LaunchDaemons/AervaneHelper"
-codesign --force --options runtime --timestamp=none --sign "$SIGN_IDENTITY" "$APP"
+timestamp_args=(--timestamp=none)
+if [[ "$SIGN_TIMESTAMP" == enabled ]]; then timestamp_args=(--timestamp); fi
+codesign --force --identifier "$HELPER_ID" --options runtime "${timestamp_args[@]}" --sign "$SIGN_IDENTITY" "$APP/Contents/Library/LaunchDaemons/AervaneHelper"
+codesign --force --options runtime "${timestamp_args[@]}" --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
 echo "Built $APP"

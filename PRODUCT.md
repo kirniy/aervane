@@ -23,7 +23,7 @@ Menu-bar-only. Percentage controls; editable presets; no speed-adjustment dialog
 Modern native glass, beautiful custom icon, snappy microinteractions. The user named Emil and Impeccable for design guidance and Ideogram for artwork. Aervane replaces the earlier working name Zephyr after exact package-name checks.
 
 ## Evidence on Hand
-Installed Macs Fan Control 1.5.21 and the user's two screenshots. REA/Hopper investigation underway. No benchmark claim exists yet.
+Installed Macs Fan Control 1.5.21 and the user's screenshots. REA/Hopper verified the SMC envelope and write path; live MCP connection is repaired. Actual native panel captures and a short local resource measurement exist. Hardware-write validation and public distribution remain incomplete.
 
 ## Product Principles
 - One direct gesture for fan adjustment.
