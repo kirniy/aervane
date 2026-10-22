@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test-and-build:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: swift test
+      - name: Build unsigned release products
+        run: swift build -c release
+      - name: Archive products
+        run: |
+          mkdir -p dist
+          cp .build/release/Aervane dist/Aervane
+          cp .build/release/AervaneHelper dist/AervaneHelper
+          tar -czf dist/aervane-products.tar.gz -C dist Aervane AervaneHelper
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aervane-products
+          path: dist/aervane-products.tar.gz

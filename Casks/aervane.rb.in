@@ -1,0 +1,16 @@
+cask "aervane" do
+  version "0.1.0"
+  sha256 "REPLACE_WITH_RELEASE_SHA256"
+
+  url "https://github.com/kirniy/aervane/releases/download/v#{version}/Aervane.app.zip"
+  name "Aervane"
+  desc "Native macOS menu-bar temperature and fan control"
+  homepage "https://github.com/kirniy/aervane"
+
+  app "Aervane.app"
+
+  zap trash: [
+    "~/Library/Preferences/dev.kirniy.aervane.plist",
+    "~/Library/Application Support/Aervane",
+  ]
+end

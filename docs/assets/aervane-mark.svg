@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Aervane</title>
+  <desc id="desc">A quiet airflow mark and the words Aervane, quietly in control.</desc>
+  <defs>
+    <linearGradient id="air" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9ffff"/>
+      <stop offset=".52" stop-color="#8fd9d4"/>
+      <stop offset="1" stop-color="#f1eadc"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#08151f"/>
+      <stop offset="1" stop-color="#142b36"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="420" rx="54" fill="url(#ink)"/>
+  <g transform="translate(78 78)">
+    <rect width="264" height="264" rx="64" fill="#d8efeb" opacity=".10" stroke="#b8e3de" stroke-opacity=".35"/>
+    <path d="M130 46c-34 0-60 28-60 62 0 27 13 45 34 61 25 19 43 34 43 61 0 14-5 25-12 36 55-4 95-50 95-106 0-64-43-114-100-114Z" fill="url(#air)"/>
+    <path d="M39 140c0 34 28 60 62 60 27 0 45-13 61-34 19-25 34-43 61-43 14 0 25 5 36 12-4-55-50-95-106-95-64 0-114 43-114 100Z" fill="url(#air)" opacity=".92"/>
+    <path d="M225 224c0-34-28-60-62-60-27 0-45 13-61 34-19 25-34 43-61 43-14 0-25-5-36-12 4 55 50 95 106 95 64 0 114-43 114-100Z" fill="url(#air)" opacity=".83"/>
+  </g>
+  <text x="404" y="193" fill="#eef6f4" font-family="SF Pro Display, Helvetica Neue, sans-serif" font-size="92" font-weight="650" letter-spacing="-3">Aervane</text>
+  <text x="410" y="258" fill="#9fc5c0" font-family="SF Pro Text, Helvetica Neue, sans-serif" font-size="28" letter-spacing="5">QUIETLY IN CONTROL</text>
+</svg>
