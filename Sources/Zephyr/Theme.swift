@@ -162,6 +162,8 @@ final class SoftButton: NSButton {
     var selectedTint: NSColor? { didSet { refreshFill(animated: false); needsDisplay = true } }
     var detail: String? { didSet { if detail != oldValue { needsDisplay = true } } }
     var glyph: Glyph? { didSet { if glyph != oldValue { needsDisplay = true } } }
+    /// Builds a context menu when the button is right-clicked.
+    var contextMenu: (() -> NSMenu?)?
     private var hovered = false
     private var pressed = false
     private var tracking: NSTrackingArea?
@@ -196,6 +198,19 @@ final class SoftButton: NSButton {
         refreshFill(animated: false); needsDisplay = true
     }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); resetHover() }
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenu?() ?? super.menu(for: event) }
+    /// Shows that a keyboard shortcut pressed this button: the fill flashes
+    /// to its pressed tone and back, without movement (keyboard actions are
+    /// never animated spatially).
+    func acknowledge() {
+        guard let layer, window != nil, !chromeless else { return }
+        let rest = Theme.cg(fillColor, effectiveAppearance)
+        pressed = true; let flash = Theme.cg(fillColor, effectiveAppearance); pressed = false
+        let pulse = CAKeyframeAnimation(keyPath: "backgroundColor")
+        pulse.values = [flash, flash, rest]; pulse.keyTimes = [0, 0.3, 1]; pulse.duration = 0.24
+        pulse.timingFunction = Theme.Ease.out
+        layer.add(pulse, forKey: "acknowledge")
+    }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshFill(animated: false); needsDisplay = true }
 
     /// NSButton tracks the press inside `super.mouseDown`, which returns on

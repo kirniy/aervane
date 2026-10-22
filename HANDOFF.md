@@ -22,8 +22,8 @@ The UI now has progressive slider effects and ice forming at maximum cooling, te
 
 ## What is now verified
 
-- 113 tests pass on the actual Mac with Xcode 26.2. Production app/helper build and pass strict code-signature verification with the existing Apple development identity.
-- The signed development archive also passes strict signature verification after extraction. CI builds an ad hoc UI-preview archive and performs the same extraction check; it is not a notarized public installer.
+- 134 tests pass on the actual Mac with Xcode 26.2. Production app/helper build and pass strict code-signature verification with the existing Apple development identity.
+- The signed development archive also passes strict signature verification after extraction. CI builds an ad hoc archive for verification but no longer uploads test-build artifacts, following the user’s cleanup request.
 - Installed signed helper approval and authenticated XPC work.
 - Real 100% → Auto test: independent SMC read saw `F0Md=1`, `F0Tg=4900`; fan reached about 4900 RPM. Auto then read `F0Md=0`; firmware subsequently returned to about 1000 RPM. Initial hottest CPU sample was 98.8°C.
 - Actual UI Boost and Auto actions succeeded. After removing the temperature policy, UI Balanced 60% also succeeded: independent target 2940 RPM, actual 2941 RPM, manual mode. Hottest sample in that separate physical test was 92.1°C. Tests additionally cover 60% retention at 100°C and 129°C; do not describe these simulated temperatures as physical measurements.
@@ -36,6 +36,10 @@ The UI now has progressive slider effects and ice forming at maximum cooling, te
 - Missing GPU display data now shows an error without losing manual control: independent readback stayed at 60%, target 2940, actual 2941 RPM. Returning to the available sensor clears the error.
 - Parent review corrected ice formation during a continuous drag to 100%, interrupted animations, settings-page error visibility, and Auto/Manual accessibility values. Heartbeats run in the common run-loop modes, including native control tracking.
 - Short resource samples with the helper running measured about 34 MiB physical footprint for the closed app and 0.33% of one CPU core. Helper RSS was 8.6 MiB; its physical footprint was unavailable without additional privilege. See `docs/performance.md` for methods and limits.
+
+## Additional UI pass
+
+Claude session `fc286b32-0b17-4836-89ac-39873fc37759` added inspectable temperature history, a draft-based preset editor, keyboard quick actions, native preset context menus and revised frost formation/melt. The patch compiles on this Mac with 134 passing tests. Signed version 0.2.0 is installed and actual manual control was independently verified. Full interaction verification is still in progress, and the user requests a further, more expressive slider pass before the public release.
 
 ## Sensor and key catalog
 
@@ -73,9 +77,9 @@ Set `SIGN_IDENTITY` for an Apple-signed helper build. The installed app is `/App
 
 ## Open validation and distribution work
 
-The next version is `0.2.0`, held in `VERSION` and `npm/package.json`. `tools/build.sh` uses it for the bundle version. `npm/` contains a dependency-free installer/launcher with eight passing tests. It verifies a pinned release checksum, Developer ID team, app version and Gatekeeper acceptance before replacement, refuses a running app and preserves the old app on preparation failure. The helper-unregister maintenance command now exits successfully without probing hardware when no helper is registered.
+The next version is `0.2.0`, held in `VERSION`; `tools/build.sh` uses it for the bundle version. Distribution is **Homebrew only**, following the user's latest instruction. The abandoned npm prototype remains in commit `446b10b` if ever needed; do not restart npm signup or publishing.
 
-`tools/prepare-distribution.py` generates the versioned archive metadata, real cask and prepared npm package only after checking Developer ID signatures for app/helper, architecture, Gatekeeper and the stapled ticket. A real development-signed archive was rejected as intended. The public `kirniy/homebrew-tap` repository exists and `brew tap kirniy/tap` was verified. No installable cask or npm package has been published yet. npm CLI authentication and a paid Apple Developer account/Developer ID certificate remain pending user input. Do not describe the prospective install commands as working until publication and fresh installation are checked.
+`tools/prepare-distribution.py` generates a versioned archive, metadata and cask only after verifying Developer ID signatures for app/helper, architecture, Gatekeeper and the stapled ticket. A real development-signed archive was rejected as intended. The public `kirniy/homebrew-tap` exists, `brew tap kirniy/tap` works, and the rendered cask passes `brew style`. No installable cask has been published yet. The owner has signed into Apple Developer in the in-app browser; paid Individual membership and team EEECDXYX82 are verified. No Developer ID certificate is installed yet. The currently installed development certificate is not suitable for notarization. Do not describe the prospective install command as working until publication and fresh installation are checked.
 
 - Physical pointer drag, repeated actual status-item clicks, outside dismissal, rapid toggles and multiple monitors. Native handler regression tests and keyboard/accessibility paths pass; app-scoped CUA reports `AXError.notImplemented` for pointer drag/click on the custom slider. Do not claim a physical drag test.
 - Real VoiceOver, Reduce Motion/Transparency, light theme, 1× screens and long-content states.

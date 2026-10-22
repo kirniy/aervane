@@ -83,12 +83,15 @@ Aervane is a small, precise macOS instrument: temperature leads, fan control fol
 
 The first viewport is a 344 pt glass panel. It holds a mark and name, a large rounded temperature with its unit and sensor tag, a heat-coloured trend, then the requested percentage, an Auto/Manual switch, the cooling slider and presets. Settings and preset editing stay inline. **Minimal copy:** state is carried by layout and controls, and words appear only for exceptions (Not applied, Applying…, No reading, External control, errors). Detail lives in tooltips and accessibility values.
 
+**Point of view: warm light behind the glass, frost on it.** Heat glows from behind the reading at the top. The fan's *measured* speed sends a faint cold wash up from the lower edge. The cooling *command* frosts the slider: fine hoarfrost grain from about 45%, and at 100% the lattice itself crystallises. There are no literal snowflakes and no decorative glow.
+
 **Key characteristics:**
 - Native glass. On macOS 26 the glass carries a faint heat tint when the reading is warm or hotter. There is a visual-effect fallback on macOS 14–25.
 - Two colour families that never mix: **ice** (mint → glacier cyan → ice white) is cooling power; **heat** (amber → orange → coral) is the measured temperature.
 - Event-driven motion only: no idle animation, timers, display links or particles.
+- Keyboard-complete: every core action has a plain key, and text fields keep their own keys.
 
-*Implementation status (2026-10-23):* Claude's redesign is integrated, compiled with Xcode 26.2, development-signed and installed. Dark appearance, settings persistence, native accessibility value changes, real fan writes, optional timer expiry and three-digit Fahrenheit layout were exercised on the development Mac. Screenshots in `docs/assets` show the installed app. Light mode, 1× displays, system Reduce Motion/Transparency, VoiceOver and physical pointer behavior still need verification; handler tests alone do not establish those results.
+*Implementation status (2026-10-23):* The frost/crystal artwork, cold air, trend inspection, draft preset editor and keyboard quick actions described below were written on Linux. Their pure rules are tested there; the AppKit code has not been compiled or seen on a Mac yet. Earlier status: Claude's redesign is integrated, compiled with Xcode 26.2, development-signed and installed. Dark appearance, settings persistence, native accessibility value changes, real fan writes, optional timer expiry and three-digit Fahrenheit layout were exercised on the development Mac. Screenshots in `docs/assets` show the installed app. Light mode, 1× displays, system Reduce Motion/Transparency, VoiceOver and physical pointer behavior still need verification; handler tests alone do not establish those results.
 
 ## Colors
 
@@ -107,6 +110,7 @@ Cool readings use mint; normal readings stay neutral ink, so colour appears only
 ### Named Rules
 **The State Must Speak Rule.** Colour never carries state alone. The mode switch position, the measured-speed mark, exception words and accessibility values carry it too.
 **The Two Families Rule.** Cooling is never warm and heat is never icy.
+**The Measured Air Rule.** Atmosphere that describes the fan (the cold wash) follows measured speed, never the request. The request lives on the slider.
 
 ## Typography
 
@@ -151,9 +155,9 @@ The panel is 24 pt glass on macOS 26 (20 pt fallback). Soft buttons use a 9 pt r
 ### Cooling slider
 - **Lattice:** five rows of dots on a 3 pt pitch. Resting dots are 2 pt; lit dots grow to 2.4 pt and cool from mint through cyan to ice white as the value rises (`SliderEnergy`). All bitmaps are rendered once per size, scale, appearance or floor change.
 - **Progressive energy:** a white-hot head trails the thumb. Its length, the halo and the overall light grow on one curve, and are stronger while dragging.
-- **Frost:** from about 45% upward, rime crystals grow along the lit edges, denser and longer toward the top (`Frost.amount`).
-- **Ice crown at 100%:** a pointer or preset reaching full cooling forms a bright rime fringe that spreads back from the thumb, plus a six-armed flake that crystallises around the thumb (about 0.6 s, Expressive only). The thumb gains an icy rim. The formed state is static artwork. Lowering the value melts it (about 0.28 s). Keyboard, VoiceOver and model refreshes show or remove it instantly.
-- **Measured speed:** a slim ghost mark shows where the fan actually runs when it differs from the request by at least 3%. It also appears in the tooltip and the accessibility value.
+- **Hoarfrost:** from about 45% upward, fine rime grains cling to the lit edges, crowding the edge and thinning outward. A few short needles appear near the top. At most four grains per column edge (`Frost.amount`, `Frost.grains`).
+- **Crystal crown at 100%:** above 70% (`Frost.crystal`) each lit dot becomes a faceted diamond that touches its neighbours, so the top of the track reads as one sheet of ice, with a hairline rim on both edges. When a pointer or preset reaches full cooling, the thumb's rim freezes and a freezing front runs back from the thumb to the crystal onset. One glint rides that front (0.62 s, Expressive only). The formed state is static artwork. Lowering the value melts it (0.28 s) from wherever the front is, so a drag that touches 100% and leaves never snaps to a full crown. Keyboard, VoiceOver and model refreshes show or remove it instantly. On Subtle a small bloom replaces the formation.
+- **Measured speed:** a slim, pixel-snapped ghost mark shows where the fan actually runs when it differs from the request by at least 3%. It also appears in the tooltip and the accessibility value.
 - **Interaction:** pointer, keyboard and accessibility changes preview immediately. Release, or a pause in key presses, commits. A pointer release sends a short light sweep back along the track. The 100% glint and haptic are user-action feedback only.
 
 ### Mode switch
@@ -166,6 +170,21 @@ The panel is 24 pt glass on macOS 26 (20 pt fallback). Soft buttons use a 9 pt r
 ### Temperature
 - The figure rolls up or down when it changes (when effects allow). The aura cross-fades between heat bands and breathes in once when the band rises.
 
+### Trend
+- Pointing at the trend inspects it. A device-pixel hairline and a probe snap to the nearest sample. That sample's exact value (one decimal, in the user's unit, heat-coloured when warm or hotter) appears in a 14 pt band above the plot. Tracking is immediate; the inspector fades in over 120 ms and out over 180 ms. New samples under a still pointer update the readout. Samples carry no timestamps, so no age is claimed. VoiceOver reads the range: "Recent temperature, 64 to 78 °C, now 73".
+
+### Cold air
+- A soft radial wash of glacier cyan rises from the panel's lower edge behind the fan controls. Its strength is `Airflow.chill` of the measured fan speed: nearly invisible at firmware idle, full at maximum, absent without a fresh reading. It eases over 0.9 s per sample, so a spinning-up fan reads as one build. Effects Off removes it.
+
+### Preset editor
+- Opened from Settings (Edit Presets) or a preset's context menu. Each preset becomes the same soft tile, now editable in place: name, speed, delete. The tile's accent edge shows where typing goes; there are no bezels or spilled focus rings.
+- Works on a draft (`PresetDraft`). **Save** (Return) stores it; **Cancel** (Escape) discards it; closing the panel or opening Settings keeps edits. Speeds below the hardware minimum turn the attention colour while typing and are raised to the floor when the field is left. ↑/↓ step a speed by 1 (⇧ by 10) within the hardware range. Names are single-line and at most 20 characters; a blank name shows and saves as "Custom". Tab runs name → speed → next row → actions.
+- **Add 64%** names exactly what it stores (the slider's speed) and is the prominent action when no presets remain. At six it is disabled.
+- Right-clicking a preset offers **Set to 64%** (store the current speed) and **Edit Presets…**.
+
+### Keyboard
+- Arrows (⇧ for 10), Page Up/Down, Home/End adjust the slider. **1–6** apply presets (by key position, so AZERTY and the keypad work). **A** restores Auto. **M** takes manual control at the shown speed. **⌘,** toggles Settings. Escape cancels the preset editor first, then closes the panel. Shortcuts with ⌘, ⌥ or ⌃ pass through, and text fields never see quick keys. A preset applied by key flashes its fill without movement, and the thumb jumps instead of gliding.
+
 ## Motion & Effects
 
 The Effects setting is **Off / Subtle / Expressive** (default Expressive), resolved into an `EffectsProfile`:
@@ -175,7 +194,7 @@ The Effects setting is **Off / Subtle / Expressive** (default Expressive), resol
 - **Reduce Motion:** removes all movement (glide, roll, sweep, formation, glint, entrance) and keeps static state such as the ice crown.
 - **Reduce Transparency:** halves light and frost and removes the glass tint.
 
-Timing: press 90 ms in, then a spring out. Fills 180 ms. Glide 200 ms. Section swap 260 ms. Formation 620 ms. Melt 280 ms. Easing is strong ease-out `(0.23, 1, 0.32, 1)` or ease-in-out `(0.65, 0, 0.35, 1)`. Nothing loops, and hiding the panel removes every transient animation.
+Timing: press 90 ms in, then a spring out. Fills 180 ms. Glide 200 ms. Percent roll 220 ms. Section swap 260 ms. Formation 620 ms. Melt 280 ms. Cold air 900 ms per sample. Trend inspector 120 ms in, 180 ms out. Easing is strong ease-out `(0.23, 1, 0.32, 1)` or ease-in-out `(0.65, 0, 0.35, 1)`. Nothing loops, and hiding the panel removes every transient animation.
 
 ## Do's and Don'ts
 
@@ -189,5 +208,6 @@ Timing: press 90 ms in, then a spring out. Fills 180 ms. Glide 200 ms. Section s
 - **Don't** add taglines, footers, section labels or explanatory helper text to the panel.
 - **Don't** use warm colours for cooling or icy colours for heat.
 - **Don't** add idle animation, timers, display links, particles or network-dependent visuals.
+- **Don't** draw literal snowflakes or add glow for its own sake; frost is grain and crystal on the lattice.
 - **Don't** describe a preview as applied or imply that zero is available below the firmware floor.
 - **Don't** let a heat state imply that manual control is blocked.

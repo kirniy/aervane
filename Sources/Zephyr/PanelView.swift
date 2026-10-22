@@ -7,7 +7,15 @@ import ZephyrCore
 /// Minimal copy: state is carried by layout and controls (the mode switch,
 /// the measured-speed mark on the slider, heat colour), and text appears
 /// only for exceptions that need words (not applied, no reading, errors).
-final class PanelView: FlippedView, NSTextFieldDelegate {
+///
+/// Visual point of view: warm light behind the glass, frost on it. Heat
+/// glows from behind the reading at the top; the fan's measured speed sends
+/// cold air up from the lower edge; the cooling command frosts the slider.
+///
+/// Keyboard: arrows adjust the slider, 1–6 apply presets, A restores Auto,
+/// M takes manual control at the shown speed, ⌘, toggles Settings. In the
+/// preset editor Return saves and Escape cancels. Text fields keep their keys.
+final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     static let width: CGFloat = 344
     let model: AppModel
     var resize: ((CGFloat) -> Void)?
@@ -27,6 +35,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
     private let unit = label("°C", size: 17, color: .secondaryLabelColor)
     private let sensorTag = label("CPU", size: 10, weight: .semibold, color: .secondaryLabelColor)
     private let chart = TemperatureHistory()
+    private let chill = ChillView()
     private lazy var settingsButton = SoftButton("", glyph: .settings) { [weak self] in self?.toggleSettings() }
 
     // Fan section.
@@ -37,12 +46,18 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
     private let floorLabel = label("", size: 10, weight: .medium, color: .secondaryLabelColor)
     private let message = NSTextField(wrappingLabelWithString: "")
     private lazy var autoButton = SoftButton("Auto") { [weak self] in self?.model.restore() }
-    private lazy var manualButton = SoftButton("Manual") { [weak self] in guard let self else { return }; self.request(self.model.shownPercent, animated: false) }
+    private lazy var manualButton = SoftButton("Manual") { [weak self] in guard let self else { return }; self.request(self.model.shownPercent, motion: .none) }
     private lazy var modeSwitch = ModeSwitch(auto: autoButton, manual: manualButton)
     private lazy var enableButton = SoftButton("Set up fan control", glyph: .airflow) { [weak self] in self?.model.enableControl() }
     private var presetButtons: [SoftButton] = []
-    private var editorViews: [NSView] = []
-    private var editing = false
+
+    // Preset editor: works on a draft; Save stores it, Cancel drops it.
+    private var draft: PresetDraft?
+    private var editing: Bool { draft != nil }
+    private var editorRows: [PresetEditorRow] = []
+    private lazy var addButton = SoftButton("", glyph: .plus) { [weak self] in self?.addPreset() }
+    private lazy var cancelButton = SoftButton("Cancel") { [weak self] in self?.cancelEditing() }
+    private lazy var saveButton = SoftButton("Save") { [weak self] in self?.saveEditing() }
 
     // Settings page (replaces the fan section while open).
     private lazy var settingsPage = SettingsView(model: model)
@@ -56,7 +71,8 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         self.model = model; super.init(frame: .init(x: 0, y: 0, width: Self.width, height: 300))
         wantsLayer = true
         [aura, mark, titleLabel, temperature, unit, sensorTag, chart, settingsButton, fanSection, settingsPage].forEach(addSubview)
-        [percent, stateChip, modeSwitch, slider, floorLabel, enableButton, message].forEach(fanSection.addSubview)
+        [chill, percent, stateChip, modeSwitch, slider, floorLabel, enableButton, message, addButton, cancelButton, saveButton].forEach(fanSection.addSubview)
+        percent.wantsLayer = true
         fanSection.wantsLayer = true; settingsPage.wantsLayer = true; settingsPage.isHidden = true
         temperature.font = Theme.rounded(52, .light); temperature.wantsLayer = true
         unit.font = Theme.rounded(17)
@@ -66,13 +82,18 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         mark.image = Glyphs.image(.airflow, size: 16, color: Theme.accent); mark.imageScaling = .scaleNone
         mark.setAccessibilityElement(false)
         settingsButton.quiet = true; enableButton.prominent = true
-        settingsButton.setAccessibilityLabel("Settings"); settingsButton.toolTip = "Settings"
+        settingsButton.setAccessibilityLabel("Settings"); settingsButton.toolTip = "Settings (⌘,)"
         autoButton.setAccessibilityLabel("Restore automatic fan control"); manualButton.setAccessibilityLabel("Manual fan control")
+        autoButton.toolTip = "Auto (A)"
+        addButton.quiet = true; cancelButton.quiet = true; saveButton.selected = true
+        saveButton.setAccessibilityLabel("Save presets"); cancelButton.setAccessibilityLabel("Discard preset changes")
+        saveButton.toolTip = "Save (Return)"; cancelButton.toolTip = "Cancel (Esc)"
+        [addButton, cancelButton, saveButton].forEach { $0.isHidden = true }
         percent.setAccessibilityLabel("Requested fan speed")
         floorLabel.toolTip = "Hardware minimum"; floorLabel.alignment = .center
         slider.preview = { [weak self] value in self?.showReadout(value) }
-        slider.commit = { [weak self] value in self?.request(value, animated: false) }
-        settingsPage.editPresets = { [weak self] in self?.openEditorFromSettings() }
+        slider.commit = { [weak self] value in self?.request(value, motion: .none) }
+        settingsPage.editPresets = { [weak self] in self?.openEditor() }
         settingsPage.quit = { [weak self] in self?.quit?() }
         settingsPage.changed = { [weak self] in self?.update() }
         update()
@@ -81,8 +102,11 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
 
     var desiredHeight: CGFloat { arrange(apply: false) }
     func prepareForHiding() {
+        // Closing the panel keeps edits, like other macOS popovers; only
+        // Cancel or Escape discards them.
+        if editing { saveEditing(focus: false) }
         endTextEditing()
-        slider.prepareForHiding()
+        slider.prepareForHiding(); chart.endInspection()
         for button in allButtons { button.resetHover() }
         settleAnimations(in: layer)
     }
@@ -92,7 +116,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         if let mask = layer?.mask { settleAnimations(in: mask) }
     }
     private var allButtons: [SoftButton] {
-        [settingsButton, autoButton, manualButton, enableButton] + presetButtons + editorViews.compactMap { $0 as? SoftButton } + settingsPage.buttons
+        [settingsButton, autoButton, manualButton, enableButton, addButton, cancelButton, saveButton] + presetButtons + editorRows.map(\.remove) + settingsPage.buttons
     }
     override func layout() { super.layout(); arrange(apply: true) }
     override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); needsLayout = true }
@@ -112,6 +136,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         slider.effects = effects
         chart.heatColor = PresentationPreferences.shared.heatColor
         aura.apply(state: thermal, effects: effects, heatColor: PresentationPreferences.shared.heatColor, animated: false)
+        chill.apply(level: chillLevel, effects: effects, animated: false)
         settingsPage.sync()
         update()
         if Theme.reduceMotion { settleAnimations(in: layer) }
@@ -137,7 +162,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         let unitY = (y + (numberFont.ascender - numberFont.capHeight) - (unitFont.ascender - unitFont.capHeight)).rounded()
         put(unit, m - 3 + numberWidth, unitY, 40, 22)
         put(sensorTag, m - 1 + numberWidth, unitY + 21, 44, 13)
-        put(chart, m + w - 124, y + 14, 124, 40)
+        put(chart, m + w - 124, y + 14 - TemperatureHistory.readoutBand, 124, 40 + TemperatureHistory.readoutBand)
         // The aura is centred on the figure; its gradient fills the view, so
         // layer geometry flipping cannot move it.
         put(aura, m + numberWidth / 2 - 150, y + 31 - 95, 300, 190)
@@ -157,6 +182,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         put(modeSwitch, m + w - 128, y + 3, 128, 28)
         y += 34 + 4
         // Slider (hit area spills into the margins) and its floor mark.
+        let sliderTop = y
         put(slider, m - 16, y, w + 32, 34)
         y += 34
         let floorX = (m - 16) + PercentSlider.trackX(percent: model.minimumPercent, width: w + 32)
@@ -166,9 +192,8 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         // 5 → 3+2, 6 → 3×2. Short last rows stretch to the full width.
         let gap: CGFloat = 8
         if editing {
-            let rows = max(0, (editorViews.count - 2) / 4)
             if apply { layoutEditor(at: y, margin: m, width: w) }
-            y += CGFloat(rows) * 34 + 30 + 12
+            y += CGFloat(editorRows.count) * (PresetEditorRow.height + 6) + 28 + 12
         } else if !presetButtons.isEmpty {
             let count = presetButtons.count
             let perRow = count <= 3 ? count : count == 4 ? 2 : 3
@@ -186,6 +211,10 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
             put(message, m, y, w, height); y += height + 8
         }
         y += 2
+        // Cold air rises from the lower edge: the ellipse is centred on the
+        // panel's bottom, so only its upper half shows through the glass.
+        let chillTop = sliderTop - 8
+        put(chill, -12, chillTop, bounds.width + 24, max(0, 2 * (y - chillTop)))
         put(fanSection, 0, top, bounds.width, y)
         return top + y
     }
@@ -217,7 +246,9 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
             aura.apply(state: state, effects: effects, heatColor: prefs.heatColor, animated: window?.isVisible == true, rising: state > thermal && thermal != .unknown)
             thermal = state; thermalChanged?(state)
         }
+        chart.fahrenheit = model.fahrenheit
         chart.samples = model.history
+        chill.apply(level: chillLevel, effects: effects, animated: window?.isVisible == true)
 
         // Fan.
         slider.minimumPercent = model.minimumPercent
@@ -244,7 +275,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         manualButton.isEnabled = !model.stale
         if let deadline = model.controlDeadline, model.ownsControl {
             manualButton.toolTip = "Returns to Auto in \(DurationText.short(minutes: max(1, deadline.timeIntervalSinceNow / 60)))"
-        } else { manualButton.toolTip = nil }
+        } else { manualButton.toolTip = "Manual (M)" }
         syncPresets()
         settingsButton.selected = settingsOpen
 
@@ -256,20 +287,29 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         message.toolTip = model.error
         settingsPage.updateStatus()
 
-        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorViews.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)|\(percent.stringValue.count)|\(model.minimumPercent)|\(settingsPage.layoutKey)"
+        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorRows.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)|\(percent.stringValue.count)|\(model.minimumPercent)|\(settingsPage.layoutKey)"
         if key != layoutKey { layoutKey = key; needsLayout = true }
         resize?(desiredHeight)
     }
 
-    /// Big number and, only when it needs words, the state.
-    private func showReadout(_ value: Double) {
+    /// Big number and, only when it needs words, the state. `roll` turns the
+    /// figure over like a counter (preset clicks); drags and keys never roll.
+    private func showReadout(_ value: Double, roll: Bool = false) {
         let shown = Int(value.rounded())
         let text = model.sample == nil ? "—%" : "\(shown)%"
-        if percent.stringValue != text { percent.stringValue = text; needsLayout = true }
+        if percent.stringValue != text {
+            if roll, Theme.effects.rolls, window?.isVisible == true, let old = Int(percent.stringValue.dropLast()) {
+                let turn = CATransition(); turn.type = .push; turn.subtype = shown > old ? .fromBottom : .fromTop
+                turn.duration = 0.22; turn.timingFunction = Theme.Ease.out
+                percent.layer?.add(turn, forKey: "roll")
+            }
+            percent.stringValue = text; needsLayout = true
+        }
         percent.setAccessibilityValue(model.sample == nil ? "unavailable" : "\(shown) percent")
         let chip = exceptionState(interacting: slider.isInteracting)
         stateChip.stringValue = chip?.0 ?? ""; stateChip.textColor = chip?.1 ?? Theme.secondary
         stateChip.isHidden = chip == nil
+        if editing { syncAddButton() }
         for (i, button) in presetButtons.enumerated() where model.presets.indices.contains(i) {
             button.selected = (model.ownsControl || model.requestedPercent != nil || slider.isInteracting) && abs(value - effectivePercent(model.presets[i])) < 0.5
         }
@@ -285,16 +325,26 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
     }
     private func effectivePercent(_ preset: FanPreset) -> Double { max(model.minimumPercent, min(100, preset.percent)).rounded() }
 
+    /// How a requested speed reaches the thumb: pointer actions glide,
+    /// keyboard actions jump, and slider commits are already in place.
+    private enum Motion { case glide, instant, none }
+
     /// Single path for every user-requested speed (slider release, keys,
     /// presets, Manual). Before setup the model stores it as a preview.
-    private func request(_ value: Double, animated: Bool) {
+    private func request(_ value: Double, motion: Motion) {
         let target = max(model.minimumPercent, min(100, value.rounded()))
         if !model.stale {
             hold = (target, Date().addingTimeInterval(3))
-            if animated { slider.setPercent(target, animated: true, celebrate: true) }
+            switch motion {
+            case .glide: slider.setPercent(target, animated: true, celebrate: true); showReadout(target, roll: true)
+            case .instant: slider.setPercent(target, animated: false, celebrate: true); showReadout(target)
+            case .none: break
+            }
         }
         model.setPercent(target)
     }
+    /// Cold-air strength: the measured fan speed, absent without a fresh reading.
+    private var chillLevel: Double { Airflow.chill(measuredPercent: model.sample == nil || model.stale ? nil : model.actualPercent) }
 
     // MARK: Presets
 
@@ -303,122 +353,240 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
             presetButtons.forEach { $0.removeFromSuperview() }
             presetButtons = model.presets.indices.map { i in
                 let button = SoftButton("") { [weak self] in self?.applyPreset(at: i) }
+                button.contextMenu = { [weak self] in self?.presetMenu(at: i) }
                 fanSection.addSubview(button); return button
             }
         }
         for (i, button) in presetButtons.enumerated() {
             let preset = model.presets[i], figure = "\(Int(effectivePercent(preset)))%"
             if button.title != preset.name { button.title = preset.name }
-            button.detail = figure; button.toolTip = nil
+            // The full name lives in the tooltip; long names truncate on the tile.
+            button.detail = figure; button.toolTip = "\(preset.name) (\(i + 1))"
             button.setAccessibilityLabel("\(preset.name) preset, \(figure)")
             button.isEnabled = !model.stale
             button.isHidden = editing
         }
         showReadout(slider.percent)
     }
-    private func applyPreset(at i: Int) {
+    private func applyPreset(at i: Int, keyboard: Bool = false) {
         guard model.presets.indices.contains(i) else { return }
-        request(model.presets[i].percent, animated: true)
+        request(model.presets[i].percent, motion: keyboard ? .instant : .glide)
+        if keyboard, presetButtons.indices.contains(i) { presetButtons[i].acknowledge() }
     }
-    /// Ends any in-progress text edit so its value is saved before the editor
-    /// or settings are rebuilt.
+    /// Right-click on a preset: store the current speed in it, or edit all.
+    private func presetMenu(at i: Int) -> NSMenu? {
+        guard model.presets.indices.contains(i), !editing else { return nil }
+        let menu = NSMenu(); menu.autoenablesItems = false; menu.delegate = self
+        if model.sample != nil {
+            let current = max(model.minimumPercent, min(100, slider.percent.rounded()))
+            menu.addItem(MenuAction.item("Set to \(Int(current))%", enabled: effectivePercent(model.presets[i]) != current) { [weak self] in
+                guard let self, self.model.presets.indices.contains(i) else { return }
+                self.model.presets[i].percent = current; self.model.savePresets()
+            })
+            menu.addItem(.separator())
+        }
+        menu.addItem(MenuAction.item("Edit Presets…") { [weak self] in self?.openEditor() })
+        return menu
+    }
+    /// True while a preset's context menu is open; a click on the menu is
+    /// not a click outside the panel.
+    private(set) var isTrackingMenu = false
+    func menuWillOpen(_ menu: NSMenu) { isTrackingMenu = true }
+    func menuDidClose(_ menu: NSMenu) { isTrackingMenu = false }
+
+    // MARK: Keyboard
+
+    /// Keeps keys flowing to the panel while the slider is hidden (Settings).
+    /// Otherwise the slider keeps focus, even after a click on empty glass.
+    override var acceptsFirstResponder: Bool { settingsOpen }
+    override func keyDown(with event: NSEvent) {
+        if editing {
+            switch event.keyCode {
+            case 36, 76: saveEditing()                 // Return, Enter
+            case 53: cancelEditing()                   // Escape
+            default: super.keyDown(with: event)
+            }
+            return
+        }
+        if event.keyCode == 53 { window?.cancelOperation(nil); return }
+        let flags = event.modifierFlags
+        guard !settingsOpen, !slider.dragging,
+              let action = QuickAction.resolve(characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
+                                               command: flags.contains(.command), option: flags.contains(.option),
+                                               control: flags.contains(.control), presetCount: model.presets.count),
+              action != .settings else { super.keyDown(with: event); return }
+        run(action)
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, event.charactersIgnoringModifiers == "," { toggleSettings(); return true }
+        return super.performKeyEquivalent(with: event)
+    }
+    private func run(_ action: QuickAction) {
+        switch action {
+        case .preset(let i):
+            guard !model.stale else { NSSound.beep(); return }
+            applyPreset(at: i, keyboard: true)
+        case .automatic: model.restore()
+        case .manual:
+            guard !model.stale else { NSSound.beep(); return }
+            request(model.shownPercent, motion: .instant)
+        case .settings: toggleSettings()
+        }
+    }
+    /// Escape peels one layer: an open preset editor cancels first. Returns
+    /// false when there is nothing to peel and the panel should close.
+    func dismissTopLayer() -> Bool {
+        guard editing else { return false }
+        cancelEditing(); return true
+    }
+
+    // MARK: Preset editor
+
+    /// Ends any in-progress text edit so its value reaches the draft before
+    /// the editor or settings are rebuilt.
     private func endTextEditing() {
         guard let window, window.firstResponder is NSText else { return }
         window.makeFirstResponder(nil)
     }
-    private func openEditorFromSettings() {
-        endTextEditing()
-        settingsOpen = false; editing = true
-        rebuildEditor(); showSection(fanSection, from: -1); update()
+    private func focusControls() {
+        guard let window, window.isVisible else { return }
+        window.makeFirstResponder(settingsOpen ? self : slider)
     }
-    private func finishEditing() {
+    private func openEditor() {
         endTextEditing()
-        editing = false; rebuildEditor(); update()
+        if draft == nil { draft = PresetDraft(model.presets) }
+        if settingsOpen { settingsOpen = false; showSection(fanSection, from: -1) }
+        rebuildEditor(); update(); layoutSubtreeIfNeeded()
+        if let first = editorRows.first { window?.makeFirstResponder(first.name) } else { focusControls() }
+    }
+    private func saveEditing(focus: Bool = true) {
+        endTextEditing()
+        guard let draft else { return }
+        model.presets = draft.resolved(minimum: model.minimumPercent); model.savePresets()
+        closeEditor(focus: focus)
+    }
+    private func cancelEditing() {
+        endTextEditing()
+        closeEditor(focus: true)
+    }
+    private func closeEditor(focus: Bool) {
+        draft = nil; rebuildEditor(); update()
+        if focus { focusControls() }
     }
     private func rebuildEditor() {
-        editorViews.forEach { $0.removeFromSuperview() }; editorViews.removeAll()
-        guard editing else { return }
-        for (i, preset) in model.presets.enumerated() {
-            let name = NSTextField(string: preset.name); name.font = Theme.font(12); name.bezelStyle = .roundedBezel; name.placeholderString = "Name"; name.tag = i * 10; name.delegate = self; name.setAccessibilityLabel("Preset \(i + 1) name")
-            let value = NSTextField(string: "\(Int(preset.percent))"); value.font = Theme.number(12); value.alignment = .right; value.bezelStyle = .roundedBezel; value.tag = i * 10 + 1; value.delegate = self; value.setAccessibilityLabel("Preset \(i + 1) percentage")
-            let suffix = label("%", size: 12, color: .secondaryLabelColor)
-            let remove = SoftButton("", glyph: .close) { [weak self] in self?.removePreset(at: i) }
-            remove.quiet = true; remove.setAccessibilityLabel("Delete \(preset.name) preset"); remove.toolTip = "Delete"
-            [name, value, suffix, remove].forEach { editorViews.append($0); fanSection.addSubview($0) }
+        editorRows.forEach { $0.removeFromSuperview() }; editorRows.removeAll()
+        [addButton, cancelButton, saveButton].forEach { $0.isHidden = !editing }
+        guard let draft else { return }
+        for (i, item) in draft.items.enumerated() {
+            // Deferred: the delete button must not be torn down inside its own click.
+            let row = PresetEditorRow(index: i) { [weak self] in DispatchQueue.main.async { self?.removePreset(at: i) } }
+            row.configure(name: item.name, percent: PresetDraft.effective(item.percent, minimum: model.minimumPercent), position: i + 1)
+            row.name.delegate = self; row.value.delegate = self
+            editorRows.append(row); fanSection.addSubview(row)
         }
-        let full = model.presets.count >= 6
-        let add = SoftButton("Add current speed", glyph: .plus) { [weak self] in self?.addPreset() }
-        add.quiet = true; add.isEnabled = !full; add.toolTip = full ? "Up to six presets" : nil
-        let done = SoftButton("Done") { [weak self] in self?.finishEditing() }
-        done.selected = true; done.setAccessibilityLabel("Finish editing presets")
-        [add, done].forEach { editorViews.append($0); fanSection.addSubview($0) }
+        // Tab runs name → speed → next row, then the actions.
+        let fields = editorRows.flatMap { [$0.name as NSView, $0.value] }
+        for (field, next) in zip(fields, Array(fields.dropFirst()) + [addButton]) { field.nextKeyView = next }
+        addButton.nextKeyView = cancelButton; cancelButton.nextKeyView = saveButton; saveButton.nextKeyView = fields.first ?? addButton
+        syncAddButton()
+    }
+    /// "Add 64%" names exactly what the button will store: the slider's speed.
+    private func syncAddButton() {
+        guard let draft else { return }
+        let speed = Int(max(model.minimumPercent, min(100, slider.percent.rounded())))
+        if addButton.title != "Add \(speed)%" { addButton.title = "Add \(speed)%"; needsLayout = true }
+        addButton.isEnabled = !draft.isFull && model.sample != nil
+        addButton.prominent = draft.isEmpty
+        addButton.toolTip = draft.isFull ? "Six presets at most" : nil
+        addButton.setAccessibilityLabel("Add a preset at \(speed) percent")
     }
     private func layoutEditor(at y: CGFloat, margin m: CGFloat, width w: CGFloat) {
-        let rows = max(0, (editorViews.count - 2) / 4)
-        let removeX = m + w - 28, suffixX = removeX - 8 - 14, valueX = suffixX - 2 - 52
-        for i in 0..<rows {
-            let row = y + CGFloat(i) * 34
-            editorViews[i * 4].frame = .init(x: m, y: row + 2, width: valueX - 8 - m, height: 24)
-            editorViews[i * 4 + 1].frame = .init(x: valueX, y: row + 2, width: 52, height: 24)
-            editorViews[i * 4 + 2].frame = .init(x: suffixX, y: row + 6, width: 14, height: 16)
-            editorViews[i * 4 + 3].frame = .init(x: removeX, y: row, width: 28, height: 28)
+        for (i, row) in editorRows.enumerated() {
+            row.frame = NSRect(x: m, y: y + CGFloat(i) * (PresetEditorRow.height + 6), width: w, height: PresetEditorRow.height)
         }
-        let actions = y + CGFloat(rows) * 34 + 2
-        editorViews[editorViews.count - 2].frame = .init(x: m - 4, y: actions, width: 158, height: 28)
-        editorViews[editorViews.count - 1].frame = .init(x: m + w - 64, y: actions, width: 64, height: 28)
+        let actions = y + CGFloat(editorRows.count) * (PresetEditorRow.height + 6)
+        let addWidth = ceil((addButton.title as NSString).size(withAttributes: [.font: Theme.font(12, .medium)]).width) + 16 + 6 + 22
+        addButton.frame = NSRect(x: m - (addButton.prominent ? 0 : 6), y: actions, width: addWidth, height: 28)
+        saveButton.frame = NSRect(x: m + w - 64, y: actions, width: 64, height: 28)
+        cancelButton.frame = NSRect(x: saveButton.frame.minX - 6 - 70, y: actions, width: 70, height: 28)
     }
     private func removePreset(at i: Int) {
+        guard editing else { return }
         endTextEditing()
-        guard model.presets.indices.contains(i) else { return }
-        model.presets.remove(at: i); model.savePresets(); rebuildEditor(); update()
+        draft?.remove(at: i); rebuildEditor(); update()
+        focusControls()
     }
     private func addPreset() {
         endTextEditing()
-        guard model.presets.count < 6 else { return }
-        model.presets.append(FanPreset(name: "Custom", percent: max(model.minimumPercent, slider.percent.rounded())))
-        model.savePresets(); rebuildEditor(); update()
-        if let field = editorViews.dropLast(2).dropLast(3).last as? NSTextField { window?.makeFirstResponder(field); field.currentEditor()?.selectAll(nil) }
+        guard draft?.isFull == false, model.sample != nil,
+              draft?.add(percent: max(model.minimumPercent, min(100, slider.percent.rounded()))) != nil else { return }
+        rebuildEditor(); update(); layoutSubtreeIfNeeded()
+        guard let row = editorRows.last else { return }
+        row.playEntrance()
+        window?.makeFirstResponder(row.name); row.name.currentEditor()?.selectAll(nil)
     }
-    /// Saves as you type so closing the editor, opening Settings or hiding
-    /// the panel never loses an edit. Buttons update live.
-    func controlTextDidChange(_ obj: Notification) {
-        guard let field = obj.object as? NSTextField, model.presets.indices.contains(field.tag / 10) else { return }
+    private func editorRow(for field: NSTextField) -> (index: Int, row: PresetEditorRow)? {
         let i = field.tag / 10
-        if field.tag % 10 == 0 {
-            let name = String(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
-            guard !name.isEmpty else { return }
-            model.presets[i].name = name
+        guard editorRows.indices.contains(i), editorRows[i].name === field || editorRows[i].value === field else { return nil }
+        return (i, editorRows[i])
+    }
+    /// Edits go to the draft as you type; the tiles update only on Save.
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField, let (i, row) = editorRow(for: field), draft != nil else { return }
+        if field === row.name {
+            let shown = draft?.rename(i, to: field.stringValue) ?? field.stringValue
+            if shown != field.stringValue { field.stringValue = shown }
+            row.remove.setAccessibilityLabel(shown.isEmpty ? "Delete preset \(i + 1)" : "Delete \(shown)")
         } else {
-            guard let n = Double(field.stringValue.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)), n.isFinite else { return }
-            model.presets[i].percent = max(0, min(100, n.rounded()))
+            draft?.setPercent(i, text: field.stringValue)
+            row.showFloorWarning(PresetDraft.isBelowFloor(field.stringValue, minimum: model.minimumPercent), minimum: model.minimumPercent)
         }
-        model.savePresets()
     }
     func controlTextDidEndEditing(_ obj: Notification) {
-        guard let field = obj.object as? NSTextField, model.presets.indices.contains(field.tag / 10) else { return }; let i = field.tag / 10
-        if field.tag % 10 == 0 {
-            let value = String(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
-            model.presets[i].name = value.isEmpty ? "Custom" : value; field.stringValue = model.presets[i].name
-        } else {
-            if let n = Double(field.stringValue.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)), n.isFinite { model.presets[i].percent = max(model.minimumPercent, min(100, n.rounded())) }
-            field.stringValue = "\(Int(model.presets[i].percent))"
+        guard let field = obj.object as? NSTextField, let (i, row) = editorRow(for: field), let item = draft?.items[i] else { return }
+        if field === row.value {
+            // Show what will be stored: the last valid speed, raised to the floor.
+            field.stringValue = "\(Int(PresetDraft.effective(item.percent, minimum: model.minimumPercent)))"
+            row.showFloorWarning(false, minimum: model.minimumPercent)
         }
-        model.savePresets(); update()
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard let field = control as? NSTextField, let (i, row) = editorRow(for: field) else { return false }
+        switch selector {
+        case #selector(NSResponder.insertNewline(_:)):
+            // Leave the field editor's callback before tearing the rows down.
+            DispatchQueue.main.async { [weak self] in self?.saveEditing() }; return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            DispatchQueue.main.async { [weak self] in self?.cancelEditing() }; return true
+        case #selector(NSResponder.moveUp(_:)), #selector(NSResponder.moveDown(_:)),
+             #selector(NSResponder.moveUpAndModifySelection(_:)), #selector(NSResponder.moveDownAndModifySelection(_:)):
+            guard field === row.value else { return false }
+            let up = selector == #selector(NSResponder.moveUp(_:)) || selector == #selector(NSResponder.moveUpAndModifySelection(_:))
+            let large = selector == #selector(NSResponder.moveUpAndModifySelection(_:)) || selector == #selector(NSResponder.moveDownAndModifySelection(_:))
+            draft?.setPercent(i, text: field.stringValue)
+            guard let value = draft?.step(i, by: (up ? 1 : -1) * (large ? 10 : 1), minimum: model.minimumPercent) else { return true }
+            field.stringValue = "\(Int(value))"; textView.selectAll(nil)
+            row.showFloorWarning(false, minimum: model.minimumPercent)
+            return true
+        default: return false
+        }
     }
 
     // MARK: Settings
 
     private func toggleSettings() {
+        if editing { saveEditing(focus: false) }
         endTextEditing()
         settingsOpen.toggle()
         if settingsOpen {
-            editing = false; rebuildEditor()
             settingsPage.sync()
             showSection(settingsPage, from: 1)
         } else {
             showSection(fanSection, from: -1)
         }
         update()
+        focusControls()
     }
     /// Swaps the lower section in place: the incoming one slides a few
     /// points in from the side it lives on and fades up; the outgoing one
@@ -493,6 +661,59 @@ final class AuraView: NSView {
         CATransaction.commit()
     }
     func settle() { glow.removeAllAnimations() }
+}
+
+/// Cold air rising from the panel's lower edge, as strong as the fan is
+/// actually running. The cooling counterpart of the heat aura: it is
+/// measured, so it builds as the fan spins up rather than when a value is
+/// requested. Changes only with new samples; never animates on its own.
+final class ChillView: NSView {
+    private let wash = CAGradientLayer()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        // Radial and centred, so geometry flipping cannot move it; the owner
+        // centres the view on the panel's lower edge.
+        wash.type = .radial; wash.startPoint = CGPoint(x: 0.5, y: 0.5); wash.endPoint = CGPoint(x: 1, y: 1); wash.opacity = 0
+        layer?.addSublayer(wash)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        wash.frame = bounds
+        CATransaction.commit()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshColors() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); refreshColors() }
+    private func refreshColors() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        wash.colors = [Theme.cg(Theme.iceMid.withAlphaComponent(dark ? 0.2 : 0.11), effectiveAppearance),
+                       Theme.cg(Theme.iceMid.withAlphaComponent(0), effectiveAppearance)]
+        CATransaction.commit()
+    }
+
+    func apply(level: Double, effects: EffectsProfile, animated: Bool) {
+        let target = Float(effects.aura * level)
+        // RPM jitter between samples is not news: only a visible change
+        // (or reaching/leaving zero) moves the wash, so a steady fan leaves
+        // nothing animating while the panel is open.
+        guard abs(wash.opacity - target) > 0.015 || (target == 0) != (wash.opacity == 0) else { return }
+        let current = (wash.presentation() ?? wash).opacity
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        wash.opacity = target
+        if animated && effects.animates {
+            // Matches the sample cadence, so a spinning-up fan reads as
+            // one continuous build rather than steps.
+            let build = CABasicAnimation(keyPath: "opacity"); build.fromValue = current; build.toValue = target
+            build.duration = 0.9; build.timingFunction = Theme.Ease.inOut
+            wash.add(build, forKey: "level")
+        } else { wash.removeAnimation(forKey: "level") }
+        CATransaction.commit()
+    }
 }
 
 /// Inline settings: short row labels on the left, native controls on the

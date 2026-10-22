@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare matching Homebrew/npm payloads only from a notarized release ZIP."""
+"""Prepare a Homebrew payload only from a notarized release ZIP."""
 import argparse
 import hashlib
 import json
@@ -59,9 +59,6 @@ def prepare(archive, output):
     version = (ROOT / "VERSION").read_text().strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("VERSION must be major.minor.patch")
-    pkg = json.loads((ROOT / "npm/package.json").read_text())
-    if pkg["version"] != version:
-        raise ValueError("npm/package.json version does not match VERSION")
     if output.exists():
         raise ValueError(f"Output already exists: {output}. Choose a new --output directory.")
     with tempfile.TemporaryDirectory(prefix="aervane-distribution-") as temp:
@@ -84,15 +81,6 @@ def prepare(archive, output):
     (output / "SHA256SUMS.txt").write_text(f"{digest}  {filename}\n")
     template = (ROOT / "Casks/aervane.rb.in").read_text()
     (output / "aervane.rb").write_text(template.replace("@VERSION@", version).replace("@SHA256@", digest))
-    package = output / "npm"
-    package.mkdir()
-    for directory in ["bin", "lib"]:
-        shutil.copytree(ROOT / "npm" / directory, package / directory)
-    for name in ["package.json", "README.md"]:
-        shutil.copy2(ROOT / "npm" / name, package / name)
-    shutil.copy2(ROOT / "LICENSE", package / "LICENSE")
-    shutil.copy2(output / "release.json", package / "release.json")
-    run("node", str(package / "bin/check-release.mjs"))
     print(f"Prepared {output}\nVersion {version}; signing team {team}; SHA-256 {digest}")
 
 

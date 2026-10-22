@@ -4,7 +4,7 @@ cask "aervane" do
 
   url "https://github.com/kirniy/aervane/releases/download/v#{version}/Aervane-#{version}-macos-arm64.zip"
   name "Aervane"
-  desc "Native macOS menu-bar temperature and fan control"
+  desc "Menu bar temperature and fan control"
   homepage "https://github.com/kirniy/aervane"
 
   depends_on arch: :arm64
@@ -19,7 +19,7 @@ cask "aervane" do
             }
 
   zap trash: [
-    "~/Library/Preferences/dev.kirniy.aervane.plist",
     "~/Library/Application Support/Aervane",
+    "~/Library/Preferences/dev.kirniy.aervane.plist",
   ]
 end

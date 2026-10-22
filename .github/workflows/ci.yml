@@ -11,11 +11,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test
         run: swift test
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Test npm installer
-        run: npm --prefix npm test
       - name: Build and verify ad hoc preview archive
         run: tools/release.sh
       - name: Reject unnotarized public distribution
@@ -25,7 +20,3 @@ jobs:
             exit 1
           fi
           grep -F 'Public releases need Developer ID Application signing' dist/distribution-check.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: aervane-ad-hoc-preview
-          path: dist/Aervane.app.zip

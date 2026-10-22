@@ -5,12 +5,14 @@ import QuartzCore
 /// percentage of maximum physical speed. The region below `minimumPercent` is
 /// the firmware floor: drawn as always running, never reachable by the thumb.
 ///
-/// The control renders cooling power. One energy curve (`SliderEnergy`)
-/// drives everything progressive: lit dots cool from mint through glacier
-/// cyan to ice white and grow denser, a white-hot head trails the thumb, a
-/// halo gathers around it, and above ~45% rime crystals grow along the lit
-/// track. At full cooling an ice crown forms around the thumb and stays as
-/// static artwork until the value drops, when it melts away.
+/// The control renders cooling power as frost on glass. One energy curve
+/// (`SliderEnergy`) drives everything progressive: lit dots cool from mint
+/// through glacier cyan to ice white and grow denser, a white-hot head trails
+/// the thumb, a halo gathers around it, and above ~45% fine hoarfrost grains
+/// cling to the lit edges. At full cooling the lattice itself crystallises:
+/// a freezing front runs back from the thumb with a single glint riding it,
+/// then the crystals stay as static artwork until the value drops and they
+/// melt away.
 ///
 /// Pointer tracking uses plain mouseDown/mouseDragged/mouseUp, so the run loop
 /// keeps delivering model updates mid-drag. All artwork is rendered into
@@ -60,7 +62,8 @@ final class PercentSlider: NSControl {
     private let sparkDots = CALayer(), headMask = CAGradientLayer()
     private let frost = CALayer(), frostMask = CALayer()
     private let floorTick = CALayer(), measuredMark = CALayer(), halo = CAGradientLayer()
-    private let crownFringe = CALayer(), crownMask = CAGradientLayer(), crownFlake = CALayer()
+    private let crownFringe = CALayer(), crownMask = CAGradientLayer()
+    private let crownGlint = CALayer(), glintMask = CAGradientLayer()
     private let bloom = CALayer(), thumb = CALayer()
 
     private enum Metric {
@@ -70,10 +73,13 @@ final class PercentSlider: NSControl {
         static let grabSlop: CGFloat = 10         // pick the thumb up without a jump
         static let glide: CFTimeInterval = 0.2
         static let bloomReach = 5, bloomLift = 5  // in grid cells
-        static let frostFringe: CGFloat = 8       // crystal room above and below the dots
-        static let crownFringe: CGFloat = 11
-        static let flake: CGFloat = 26
+        static let frostFringe: CGFloat = 8       // grain room above and below the dots
+        static let crownFringe: CGFloat = 3       // facets overhang the dots slightly
+        static let glintBand: CGFloat = 30
         static let head: CGFloat = 120
+        /// Freezing front: one stroke from the thumb to the crystal onset.
+        static let form: CFTimeInterval = 0.62
+        static let melt: CFTimeInterval = 0.28
     }
 
     override init(frame: NSRect) {
@@ -120,9 +126,14 @@ final class PercentSlider: NSControl {
         crownMask.startPoint = CGPoint(x: 1, y: 0.5); crownMask.endPoint = CGPoint(x: 0, y: 0.5)
         crownMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         crownMask.locations = [0, 1, 1]
-        for layer in [sparkDots, frost, halo, crownFringe, crownFlake, measuredMark, bloom] { layer.opacity = 0 }
-        for layer in [dimDots, litDots, sparkDots, frost, crownFringe, crownFlake, bloom] { layer.contentsGravity = .resize }
-        [dimDots, litDots, frost, floorTick, measuredMark, halo, crownFringe, crownFlake, bloom, thumb].forEach(root.addSublayer)
+        // The glint is the same facets in white, seen through a narrow band.
+        crownGlint.mask = glintMask
+        glintMask.startPoint = CGPoint(x: 0, y: 0.5); glintMask.endPoint = CGPoint(x: 1, y: 0.5)
+        glintMask.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+        glintMask.locations = [0, 0.5, 1]
+        for layer in [sparkDots, frost, halo, crownFringe, crownGlint, measuredMark, bloom] { layer.opacity = 0 }
+        for layer in [dimDots, litDots, sparkDots, frost, crownFringe, crownGlint, bloom] { layer.contentsGravity = .resize }
+        [dimDots, litDots, frost, floorTick, measuredMark, halo, crownFringe, crownGlint, bloom, thumb].forEach(root.addSublayer)
         return root
     }
     override var wantsUpdateLayer: Bool { true }
@@ -167,6 +178,8 @@ final class PercentSlider: NSControl {
         return Double((x - grid.minX - Metric.dot / 2) / max(1, grid.width - Metric.dot)) * 100
     }
     private func clamp(_ v: Double) -> Double { max(minimumPercent, min(100, v.isFinite ? v : minimumPercent)) }
+    /// Rounds to the device pixel grid so hairline marks stay crisp at 1×.
+    private func snap(_ v: CGFloat) -> CGFloat { let s = renderedScale > 0 ? renderedScale : 2; return (v * s).rounded() / s }
 
     // MARK: Artwork (rendered once per geometry/appearance)
 
@@ -211,54 +224,69 @@ final class PercentSlider: NSControl {
                 ctx.setFillColor((dark ? NSColor.white : high).cgColor)
                 for c in 0..<cols { for r in 0..<Metric.rows { Self.dot(ctx, c, r, size: CGFloat(SliderEnergy.dotSize(percent: columnPercent(c))) + 0.2) } }
             }
-            // Rime along the lit edges: crystals appear from the frost onset and
-            // become longer and denser toward full cooling.
+            // Hoarfrost: fine grains crowd the lit edges from the frost onset,
+            // thicker and reaching further toward full cooling, with a few
+            // needles near the top. Rendered once; the mask reveals it.
             self.frost.contents = Self.bitmap(frostSize, scale: scale) { ctx in
-                ctx.setStrokeColor(rime.cgColor); ctx.setLineCap(.round)
+                ctx.setFillColor(rime.cgColor); ctx.setStrokeColor(rime.cgColor); ctx.setLineCap(.round)
+                let reach = Metric.frostFringe - 1
                 for c in 0..<cols {
-                    let w = CGFloat(Frost.amount(percent: columnPercent(c)))
-                    guard w > 0.02 else { continue }
+                    let v = columnPercent(c), w = CGFloat(Frost.amount(percent: v))
+                    guard w > 0.02, v >= floorValue else { continue }
                     let x = CGFloat(c) * Metric.pitch + Metric.dot / 2
-                    for (salt, up) in [(7, true), (13, false)] where Self.noise(c, salt) < 0.12 + 0.5 * w {
-                        let length = (2 + 5.2 * w) * (0.55 + 0.45 * Self.noise(c, salt + 3))
-                        let tilt = (Self.noise(c, salt + 5) - 0.5) * 0.5
-                        let y = up ? Metric.frostFringe + grid.height + 0.4 : Metric.frostFringe - 0.4
-                        ctx.setAlpha(0.3 + 0.6 * w); ctx.setLineWidth(0.55 + 0.25 * w)
-                        Self.crystal(ctx, at: CGPoint(x: x, y: y), up: up, length: length, tilt: tilt)
+                    for (side, up) in [(0, true), (1, false)] {
+                        let edge = up ? Metric.frostFringe + grid.height + 0.3 : Metric.frostFringe - 0.3
+                        for k in 0..<Frost.grains(amount: Double(w), noise: Double(Self.noise(c, 41 + side))) {
+                            let seed = c * 7 + k
+                            let d = pow(Self.noise(seed, 53 + side), 1.7) * (1.2 + (reach - 1.2) * w)
+                            let size = (0.95 - 0.4 * d / reach) * (0.75 + 0.25 * Self.noise(seed, 61 + side))
+                            let cx = x + (Self.noise(seed, 59 + side) - 0.5) * 2.4, cy = up ? edge + d : edge - d
+                            ctx.setAlpha((0.22 + 0.6 * w) * (1 - 0.55 * d / reach))
+                            ctx.fillEllipse(in: CGRect(x: cx - size / 2, y: cy - size / 2, width: size, height: size))
+                        }
+                        if w > 0.45, Self.noise(c, 67 + side) < (w - 0.45) * 0.7 {
+                            let length = (1.6 + 3.2 * w) * (0.6 + 0.4 * Self.noise(c, 71 + side))
+                            let dir = Self.rotate(CGVector(dx: 0, dy: up ? 1 : -1), (Self.noise(c, 73 + side) - 0.5) * 0.7)
+                            ctx.setAlpha(0.3 + 0.5 * w); ctx.setLineWidth(0.5)
+                            ctx.move(to: CGPoint(x: x, y: edge)); ctx.addLine(to: CGPoint(x: x + dir.dx * length, y: edge + dir.dy * length))
+                            ctx.strokePath()
+                        }
                     }
                 }
             }
-            // The crown: a dense rime fringe with a bright edge along the
-            // upper range, plus a six-armed flake that freezes the thumb in.
+            // The crown: the top of the lattice crystallises. Each lit dot
+            // becomes a faceted diamond that touches its neighbours, so the
+            // track reads as one sheet of ice, with a hairline rim on both
+            // edges. The glint layer holds the same facets in white.
+            func facets(_ ctx: CGContext, glint: Bool) {
+                for c in 0..<cols {
+                    let v = columnPercent(c), w = CGFloat(Frost.crystal(percent: v))
+                    guard w > 0.01, v >= floorValue else { continue }
+                    let cx = CGFloat(c) * Metric.pitch + Metric.dot / 2
+                    for r in 0..<Metric.rows {
+                        let cy = CGFloat(r) * Metric.pitch + Metric.dot / 2 + Metric.crownFringe
+                        let s = (1.05 + 0.5 * w) * (0.9 + 0.1 * Self.noise(c, r + 83))
+                        ctx.setAlpha(glint ? w : (0.3 + 0.62 * w) * (0.82 + 0.18 * Self.noise(c, r + 89)))
+                        ctx.move(to: CGPoint(x: cx, y: cy + s)); ctx.addLine(to: CGPoint(x: cx + s, y: cy))
+                        ctx.addLine(to: CGPoint(x: cx, y: cy - s)); ctx.addLine(to: CGPoint(x: cx - s, y: cy)); ctx.closePath()
+                        ctx.fillPath()
+                    }
+                }
+            }
+            let onset = Self.trackX(percent: Frost.crystalOnset, width: self.bounds.width) - grid.minX
             self.crownFringe.contents = Self.bitmap(crownSize, scale: scale) { ctx in
-                let top = Metric.crownFringe + grid.height, bottom = Metric.crownFringe
+                ctx.setFillColor(rime.cgColor); facets(ctx, glint: false); ctx.setAlpha(1)
                 if let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                             colors: [rime.withAlphaComponent(0).cgColor, rime.withAlphaComponent(0.9).cgColor] as CFArray, locations: [0, 1]) {
-                    for y in [top + 0.6, bottom - 1.35] {
-                        ctx.saveGState(); ctx.clip(to: CGRect(x: grid.width * 0.3, y: y, width: grid.width * 0.7, height: 0.75))
-                        ctx.drawLinearGradient(gradient, start: CGPoint(x: grid.width * 0.3, y: 0), end: CGPoint(x: grid.width, y: 0), options: [])
+                                             colors: [rime.withAlphaComponent(0).cgColor, rime.withAlphaComponent(0.75).cgColor] as CFArray, locations: [0, 1]) {
+                    for y in [Metric.crownFringe + grid.height + 1.2, Metric.crownFringe - 1.7] {
+                        ctx.saveGState(); ctx.clip(to: CGRect(x: onset, y: y, width: grid.width - onset, height: 0.5))
+                        ctx.drawLinearGradient(gradient, start: CGPoint(x: onset, y: 0), end: CGPoint(x: grid.width, y: 0), options: [])
                         ctx.restoreGState()
                     }
                 }
-                ctx.setStrokeColor(rime.cgColor); ctx.setLineCap(.round)
-                for c in 0..<cols {
-                    let v = columnPercent(c)
-                    guard v >= 55 else { continue }
-                    let w = CGFloat((v - 55) / 45), x = CGFloat(c) * Metric.pitch + Metric.dot / 2
-                    for (salt, up) in [(23, true), (29, false)] where Self.noise(c, salt) < 0.25 + 0.6 * w {
-                        let length = (3 + 6.5 * w) * (0.5 + 0.5 * Self.noise(c, salt + 2))
-                        let tilt = (Self.noise(c, salt + 4) - 0.5) * 0.7
-                        ctx.setAlpha(0.35 + 0.6 * w); ctx.setLineWidth(0.6 + 0.35 * w)
-                        Self.crystal(ctx, at: CGPoint(x: x, y: up ? top + 0.6 : bottom - 0.6), up: up, length: length, tilt: tilt)
-                    }
-                }
             }
-            self.crownFlake.contents = Self.bitmap(CGSize(width: Metric.flake, height: Metric.flake), scale: scale) { ctx in
-                let center = CGPoint(x: Metric.flake / 2, y: Metric.flake / 2), radius = Metric.flake / 2 - 2
-                ctx.setLineCap(.round); ctx.setStrokeColor(rime.cgColor)
-                // A soft baked halo first (no live blur), then crisp arms.
-                ctx.setAlpha(0.16); ctx.setLineWidth(2.6); Self.flake(ctx, center: center, radius: radius)
-                ctx.setAlpha(0.95); ctx.setLineWidth(0.9); Self.flake(ctx, center: center, radius: radius)
+            self.crownGlint.contents = Self.bitmap(crownSize, scale: scale) { ctx in
+                ctx.setFillColor(NSColor.white.cgColor); facets(ctx, glint: true)
             }
             // Sparse ice glints on the same lattice, vertically symmetric so it
             // is independent of layer geometry flipping.
@@ -282,7 +310,7 @@ final class PercentSlider: NSControl {
             self.thumb.shadowColor = NSColor.black.cgColor
             self.thumb.shadowOpacity = dark ? 0.45 : 0.22
         }
-        for layer in [dimDots, litDots, sparkDots, frost, crownFringe, crownFlake, bloom] { layer.contentsScale = scale }
+        for layer in [dimDots, litDots, sparkDots, frost, crownFringe, crownGlint, bloom] { layer.contentsScale = scale }
         dimDots.frame = grid; litDots.frame = grid
         sparkDots.frame = CGRect(origin: .zero, size: grid.size)
         headMask.bounds = CGRect(x: 0, y: 0, width: Metric.head, height: grid.height)
@@ -291,9 +319,11 @@ final class PercentSlider: NSControl {
         frostMask.bounds = CGRect(x: 0, y: 0, width: 0, height: frost.bounds.height); frostMask.position = CGPoint(x: 0, y: frost.bounds.height / 2)
         crownFringe.frame = grid.insetBy(dx: 0, dy: -Metric.crownFringe)
         crownMask.frame = crownFringe.bounds
-        crownFlake.bounds = CGRect(x: 0, y: 0, width: Metric.flake, height: Metric.flake)
-        crownFlake.position = CGPoint(x: x(for: 100), y: grid.midY)
-        halo.bounds = CGRect(x: 0, y: 0, width: 64, height: 40)
+        crownGlint.frame = crownFringe.frame
+        glintMask.bounds = CGRect(x: 0, y: 0, width: Metric.glintBand, height: crownGlint.bounds.height)
+        glintMask.position = CGPoint(x: x(for: 100) - grid.minX, y: crownGlint.bounds.height / 2)
+        // Compact halo: the crystals carry full cooling, not a wider glow.
+        halo.bounds = CGRect(x: 0, y: 0, width: 52, height: 34)
         measuredMark.bounds = CGRect(x: 0, y: 0, width: 2, height: grid.height + 4); measuredMark.cornerRadius = 1
         bloom.bounds = CGRect(origin: .zero, size: bloomSize); bloom.position = CGPoint(x: x(for: 100), y: grid.midY)
         floorTick.isHidden = floorValue <= 0
@@ -354,7 +384,7 @@ final class PercentSlider: NSControl {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         change(halo, "opacity", animated: animate, duration: 0.25) { halo.opacity = Float(effects.glow * (0.12 + 0.88 * energy) * interaction) }
         change(halo, "transform", animated: animate, duration: 0.25) {
-            let s = CGFloat(0.7 + 0.5 * energy); halo.transform = CATransform3DMakeScale(s, s, 1)
+            let s = CGFloat(0.7 + 0.4 * energy); halo.transform = CATransform3DMakeScale(s, s, 1)
         }
         change(sparkDots, "opacity", animated: animate, duration: 0.25) { sparkDots.opacity = Float(effects.glow * (0.1 + 0.9 * energy) * interaction) }
         change(headMask, "transform", animated: animate, duration: 0.25) { headMask.transform = CATransform3DMakeScale(CGFloat(0.3 + energy), 1, 1) }
@@ -363,41 +393,56 @@ final class PercentSlider: NSControl {
         // A drag tracks instantly but may still form/melt the decorative
         // crown. Keyboard changes have neither a drag nor animated travel.
         let animateCrown = (animated || userAction && dragging) && effects.animates && window != nil
-        if crowned != isIceFormed { setCrown(crowned, form: userAction && animateCrown && effects.forms, animated: animateCrown) }
-        else if crowned { crownFringe.opacity = Float(effects.frost); crownFlake.opacity = Float(effects.frost) }
+        // A gliding thumb lands before the ice forms around it; under a drag
+        // the thumb is already there.
+        if crowned != isIceFormed { setCrown(crowned, form: userAction && animateCrown && effects.forms, animated: animateCrown, delay: animated ? Metric.glide * 0.5 : 0) }
+        else if crowned { crownFringe.opacity = Float(effects.frost) }
         CATransaction.commit()
     }
 
     /// Forms (or melts) the ice crown. The formed state is static artwork:
     /// model values hold it after any transition finishes.
-    private func setCrown(_ shown: Bool, form: Bool, animated: Bool) {
+    ///
+    /// Formation is one stroke: the thumb's rim freezes, a front of crystals
+    /// runs back from the thumb to the crystal onset, and a single glint rides
+    /// that front. Melting freezes the front wherever it is and fades it, so
+    /// a drag that touches 100% and leaves never snaps to a full crown.
+    private func setCrown(_ shown: Bool, form: Bool, animated: Bool, delay: CFTimeInterval = 0) {
         isIceFormed = shown
         let opacity = Float(shown ? effects.frost : 0)
-        let melted = CATransform3DRotate(CATransform3DMakeScale(0.72, 0.72, 1), 0.3, 0, 0, 1)
+        let grid = gridRect, thumbX = x(for: 100) - grid.minX
         CATransaction.begin(); CATransaction.setDisableActions(true)
         styleThumb()
-        crownMask.removeAllAnimations()
-        crownMask.locations = [0, 1, 1]
+        crownGlint.removeAllAnimations(); glintMask.removeAllAnimations(); crownGlint.opacity = 0
+        if shown {
+            crownMask.removeAllAnimations(); crownMask.locations = [0, 1, 1]
+            glintMask.position = CGPoint(x: thumbX, y: crownGlint.bounds.height / 2)
+        }
         if shown && form {
-            // Formation: rime spreads from the thumb back along the track
-            // while the flake crystallises, turning into place.
-            crownFringe.opacity = opacity; crownFlake.opacity = opacity; crownFlake.transform = CATransform3DIdentity
+            crownFringe.opacity = opacity
+            crownFringe.removeAnimation(forKey: "opacity")
+            // The crystals occupy the top of the range; the front crosses
+            // exactly that span, so its speed is what the eye follows.
+            let span = Double(max(0.05, min(1, (thumbX - (Self.trackX(percent: Frost.crystalOnset, width: bounds.width) - grid.minX)) / max(1, grid.width))))
             let spread = CABasicAnimation(keyPath: "locations")
-            spread.fromValue = [0, 0, 0.12]; spread.toValue = [0, 1, 1]
-            spread.duration = 0.62; spread.timingFunction = Theme.Ease.out
-            crownMask.add(spread, forKey: "form")
-            let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 0; appear.toValue = opacity; appear.duration = 0.18
-            crownFringe.add(appear, forKey: "opacity")
-            let grow = CASpringAnimation(keyPath: "transform")
-            grow.mass = 1; grow.stiffness = 260; grow.damping = 18
-            grow.fromValue = NSValue(caTransform3D: CATransform3DRotate(CATransform3DMakeScale(0.35, 0.35, 1), -0.7, 0, 0, 1))
-            grow.toValue = NSValue(caTransform3D: CATransform3DIdentity); grow.duration = grow.settlingDuration
-            let flakeIn = CABasicAnimation(keyPath: "opacity"); flakeIn.fromValue = 0; flakeIn.toValue = opacity; flakeIn.duration = 0.16
-            crownFlake.add(grow, forKey: "transform"); crownFlake.add(flakeIn, forKey: "opacity")
+            spread.fromValue = [0, 0, 0.05]; spread.toValue = [0, span, span + 0.06]
+            spread.duration = Metric.form; spread.timingFunction = Theme.Ease.out
+            let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 0; appear.toValue = opacity; appear.duration = 0.12
+            let ride = CABasicAnimation(keyPath: "position.x")
+            ride.fromValue = thumbX; ride.toValue = thumbX - CGFloat(span) * grid.width
+            ride.duration = Metric.form; ride.timingFunction = Theme.Ease.out
+            let flash = CAKeyframeAnimation(keyPath: "opacity")
+            flash.values = [0, 0.9 * opacity, 0]; flash.keyTimes = [0, 0.2, 1]; flash.duration = Metric.form
+            let start = CACurrentMediaTime() + delay
+            for animation in [spread, appear, ride, flash] as [CAAnimation] { animation.beginTime = start; animation.fillMode = .backwards }
+            crownMask.add(spread, forKey: "form"); crownFringe.add(appear, forKey: "appear")
+            glintMask.add(ride, forKey: "glint"); crownGlint.add(flash, forKey: "glint")
         } else {
-            change(crownFringe, "opacity", animated: animated, duration: shown ? 0.2 : 0.28) { crownFringe.opacity = opacity }
-            change(crownFlake, "opacity", animated: animated, duration: shown ? 0.2 : 0.28) { crownFlake.opacity = opacity }
-            change(crownFlake, "transform", animated: animated, duration: 0.28) { crownFlake.transform = shown ? CATransform3DIdentity : melted }
+            if !shown, let current = (crownMask.presentation() ?? crownMask).locations {
+                crownMask.removeAllAnimations(); crownMask.locations = current
+            }
+            change(crownFringe, "opacity", animated: animated, duration: shown ? 0.2 : Metric.melt, timing: shown ? Theme.Ease.out : Theme.Ease.inOut) { crownFringe.opacity = opacity }
+            crownFringe.removeAnimation(forKey: "appear")
         }
         CATransaction.commit()
     }
@@ -408,12 +453,19 @@ final class PercentSlider: NSControl {
         let visible = measuredPercent.map { $0.isFinite && abs($0 - value) >= 3 } ?? false
         let animate = animated && effects.animates && window != nil
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Pixel-snapped, so sample-to-sample RPM jitter usually leaves the
+        // mark where it is and adds no animation.
         if let measured = measuredPercent, measured.isFinite {
-            change(measuredMark, "position", animated: animate && measuredMark.opacity > 0, duration: 0.45, timing: Theme.Ease.inOut) {
-                measuredMark.position = CGPoint(x: x(for: measured), y: grid.midY)
+            let position = CGPoint(x: snap(x(for: measured)), y: grid.midY)
+            if position != measuredMark.position {
+                change(measuredMark, "position", animated: animate && measuredMark.opacity > 0, duration: 0.45, timing: Theme.Ease.inOut) {
+                    measuredMark.position = position
+                }
             }
         }
-        change(measuredMark, "opacity", animated: animate, duration: 0.2) { measuredMark.opacity = visible ? 1 : 0 }
+        if measuredMark.opacity != (visible ? 1 : 0) {
+            change(measuredMark, "opacity", animated: animate, duration: 0.2) { measuredMark.opacity = visible ? 1 : 0 }
+        }
         CATransaction.commit()
         toolTip = visible ? measuredPercent.map { "Fan now \(Int($0.rounded()))%" } : nil
     }
@@ -442,14 +494,16 @@ final class PercentSlider: NSControl {
         headMask.add(travel, forKey: "sweep"); sparkDots.add(flash, forKey: "sweep")
     }
 
-    /// One short glint and haptic when a user action reaches 100%. Never
-    /// repeats within a second; the glint is skipped for keyboard changes
-    /// and with Reduce Motion.
+    /// One haptic when a user action reaches 100%, plus a short bloom where
+    /// no formation plays. Never repeats within a second; the bloom is
+    /// skipped for keyboard changes and with Reduce Motion.
     private func celebrate(animated: Bool) {
         guard Date().timeIntervalSince(lastCelebration) > 1.2 else { return }
         lastCelebration = Date()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-        guard animated, effects.bloom, window != nil else { return }
+        // Where the crown forms, the formation is the acknowledgement; the
+        // bloom is the lighter one for Subtle.
+        guard animated, effects.bloom, !effects.forms, window != nil else { return }
         let fade = CAKeyframeAnimation(keyPath: "opacity"); fade.values = [0.0, 1.0, 0.0]; fade.keyTimes = [0, 0.18, 1]
         let spread = CAKeyframeAnimation(keyPath: "transform.scale"); spread.values = [0.55, 1.0, 1.15]; spread.keyTimes = [0, 0.35, 1]
         let group = CAAnimationGroup(); group.animations = [fade, spread]; group.duration = 0.48
@@ -512,7 +566,7 @@ final class PercentSlider: NSControl {
         hovered = false; keyboardFocus = false; updateThumbShape()
         allLayers.forEach { $0.removeAllAnimations() }
     }
-    private var allLayers: [CALayer] { [thumb, dimDots, litDots, litMask, sparkDots, headMask, frost, frostMask, floorTick, halo, measuredMark, crownFringe, crownMask, crownFlake, bloom] }
+    private var allLayers: [CALayer] { [thumb, dimDots, litDots, litMask, sparkDots, headMask, frost, frostMask, floorTick, halo, measuredMark, crownFringe, crownMask, crownGlint, glintMask, bloom] }
     /// Running transient animations across the control (lifecycle tests).
     var transientAnimationCount: Int { allLayers.reduce(0) { $0 + ($1.animationKeys()?.count ?? 0) } }
 
@@ -635,91 +689,10 @@ final class PercentSlider: NSControl {
     private static func rotate(_ v: CGVector, _ angle: CGFloat) -> CGVector {
         CGVector(dx: v.dx * cos(angle) - v.dy * sin(angle), dy: v.dx * sin(angle) + v.dy * cos(angle))
     }
-    /// A dendritic rime crystal growing away from an edge: a trunk with two
-    /// pairs of 60° side branches.
-    private static func crystal(_ ctx: CGContext, at base: CGPoint, up: Bool, length: CGFloat, tilt: CGFloat) {
-        let dir = rotate(CGVector(dx: 0, dy: up ? 1 : -1), tilt)
-        ctx.move(to: base); ctx.addLine(to: CGPoint(x: base.x + dir.dx * length, y: base.y + dir.dy * length))
-        for (at, reach) in [(0.38, 0.42), (0.68, 0.28)] as [(CGFloat, CGFloat)] {
-            let p = CGPoint(x: base.x + dir.dx * length * at, y: base.y + dir.dy * length * at)
-            for side in [-1.0, 1.0] as [CGFloat] {
-                let branch = rotate(dir, side * .pi / 3)
-                ctx.move(to: p); ctx.addLine(to: CGPoint(x: p.x + branch.dx * length * reach, y: p.y + branch.dy * length * reach))
-            }
-        }
-        ctx.strokePath()
-    }
-    /// A six-armed dendrite with a hexagonal core.
-    private static func flake(_ ctx: CGContext, center: CGPoint, radius: CGFloat) {
-        for arm in 0..<6 {
-            let dir = rotate(CGVector(dx: 0, dy: 1), CGFloat(arm) * .pi / 3)
-            ctx.move(to: center); ctx.addLine(to: CGPoint(x: center.x + dir.dx * radius, y: center.y + dir.dy * radius))
-            for (at, reach) in [(0.45, 0.34), (0.72, 0.22)] as [(CGFloat, CGFloat)] {
-                let p = CGPoint(x: center.x + dir.dx * radius * at, y: center.y + dir.dy * radius * at)
-                for side in [-1.0, 1.0] as [CGFloat] {
-                    let branch = rotate(dir, side * .pi / 3)
-                    ctx.move(to: p); ctx.addLine(to: CGPoint(x: p.x + branch.dx * radius * reach, y: p.y + branch.dy * radius * reach))
-                }
-            }
-        }
-        let core = radius * 0.2
-        for corner in 0...6 {
-            let v = rotate(CGVector(dx: 0, dy: core), CGFloat(corner) * .pi / 3 + .pi / 6)
-            let p = CGPoint(x: center.x + v.dx, y: center.y + v.dy)
-            if corner == 0 { ctx.move(to: p) } else { ctx.addLine(to: p) }
-        }
-        ctx.strokePath()
-    }
     /// Deterministic per-dot variation: a faint LED-matrix texture, no motion.
     private static func noise(_ a: Int, _ b: Int) -> CGFloat {
         var h = UInt32(truncatingIfNeeded: (a &* 73_856_093) ^ (b &* 19_349_663))
         h ^= h >> 13; h = h &* 1_274_126_177; h ^= h >> 16
         return CGFloat(h & 0xffff) / 65_535
     }
-}
-
-/// Recent temperature as a line whose colour follows the heat bands at each
-/// point, with a soft fill beneath. Redrawn only when samples change.
-final class TemperatureHistory: NSView {
-    var samples: [Double] = [] { didSet { if samples != oldValue { needsDisplay = true } } }
-    var heatColor = true { didSet { if heatColor != oldValue { needsDisplay = true } } }
-    override func draw(_ dirtyRect: NSRect) {
-        guard samples.count > 1, let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let r = bounds.insetBy(dx: 3, dy: 4), low = max(10, (samples.min() ?? 30) - 3), high = max(low + 6, (samples.max() ?? 60) + 3)
-        func y(_ t: Double) -> CGFloat { r.minY + CGFloat((t - low) / (high - low)) * r.height }
-        let path = CGMutablePath()
-        var points: [CGPoint] = []
-        for (i, value) in samples.enumerated() {
-            let p = CGPoint(x: r.minX + CGFloat(i) / CGFloat(max(1, samples.count - 1)) * r.width, y: y(value))
-            points.append(p)
-            if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
-        }
-        // Vertical heat gradient pinned to absolute temperatures, so a colour
-        // on the line always means the same reading.
-        let stops: [(Double, ThermalState)] = [(50, .cool), (62, .steady), (74, .warm), (86, .hot), (95, .peak)]
-        let colors = stops.map { (heatColor ? Theme.heat($0.1) : Theme.accent).cgColor } as CFArray
-        let locations = stops.map { CGFloat(max(0, min(1, ($0.0 - low) / (high - low)))) }
-        guard let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: locations) else { return }
-        let start = CGPoint(x: 0, y: y(low)), end = CGPoint(x: 0, y: y(high))
-        if let last = points.last, let first = points.first {
-            let area = path.mutableCopy() ?? CGMutablePath()
-            area.addLine(to: CGPoint(x: last.x, y: r.minY)); area.addLine(to: CGPoint(x: first.x, y: r.minY)); area.closeSubpath()
-            ctx.saveGState(); ctx.addPath(area); ctx.clip(); ctx.setAlpha(0.13)
-            ctx.drawLinearGradient(gradient, start: start, end: end, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-            ctx.restoreGState()
-        }
-        ctx.saveGState()
-        ctx.addPath(path); ctx.setLineWidth(1.4); ctx.setLineCap(.round); ctx.setLineJoin(.round)
-        ctx.replacePathWithStrokedPath(); ctx.clip()
-        ctx.drawLinearGradient(gradient, start: start, end: end, options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        ctx.restoreGState()
-        if let last = points.last {
-            let state = ThermalState.classify(samples.last)
-            (heatColor ? Theme.heat(state) : Theme.accent).setFill()
-            NSBezierPath(ovalIn: NSRect(x: last.x - 2.25, y: last.y - 2.25, width: 4.5, height: 4.5)).fill()
-        }
-    }
-    override func isAccessibilityElement() -> Bool { true }
-    override func accessibilityRole() -> NSAccessibility.Role? { .image }
-    override func accessibilityLabel() -> String? { "Recent temperature trend" }
 }

@@ -182,6 +182,30 @@ enum Frost {
     }
     /// The crown is a state, not a gradient: it exists only at maximum.
     static func crowned(percent: Double) -> Bool { percent >= 99.5 }
+    /// Where the crown crystallises the lattice: the top of the range only,
+    /// strongest at the thumb (0 below `crystalOnset`, 1 at 100%).
+    static let crystalOnset = 70.0
+    static func crystal(percent: Double) -> Double {
+        guard percent.isFinite else { return 0 }
+        let t = max(0, min(1, (percent - crystalOnset) / (100 - crystalOnset)))
+        return t * t * (3 - 2 * t)
+    }
+    /// Hoarfrost grains clinging to one edge of a column. Restrained: never
+    /// more than four, so the track stays legible as an instrument.
+    static func grains(amount: Double, noise: Double) -> Int {
+        guard amount.isFinite, amount > 0.02 else { return 0 }
+        return min(4, Int((amount * 3.4 * (0.45 + max(0, min(1, noise)))).rounded(.down)))
+    }
+}
+
+/// Cold air rising from the panel's lower edge. It follows the measured fan
+/// speed (what the hardware is doing), never the request, so it can lag a
+/// change in the same way the fan does.
+enum Airflow {
+    static func chill(measuredPercent: Double?) -> Double {
+        guard let measured = measuredPercent, measured.isFinite else { return 0 }
+        return pow(max(0, min(1, measured / 100)), 1.4)
+    }
 }
 
 /// Compact duration text for the Return to Auto setting.

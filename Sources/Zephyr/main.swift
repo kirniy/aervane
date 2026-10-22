@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.setAccessibilityLabel("Aervane temperature and fan control")
         }
         panel = MenuPanel(contentRect: .init(x: 0, y: 0, width: PanelView.width, height: 300), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.acceptsMouseMovedEvents = true
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true; panel.level = .popUpMenu; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.isMovable = false; panel.hidesOnDeactivate = false
         // The content view draws no backing of its own, so the system
         // material is what shows through everywhere.
@@ -46,7 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.glass = glass
         }
         content.autoresizingMask = [.width, .height]
-        panel.escape = { [weak self] in self?.hide() }
+        // Escape peels one layer (an open preset editor cancels) before closing.
+        panel.escape = { [weak self] in guard let self, !self.content.dismissTopLayer() else { return }; self.hide() }
         panel.initialFirstResponder = content.preferredFirstResponder
         content.resize = { [weak self] height in self?.resize(height) }; content.quit = { NSApp.terminate(nil) }
         content.thermalChanged = { [weak self] state in self?.tintGlass(for: state); self?.updateStatusItem() }
@@ -133,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !self.isPointerOverStatusItem() else { return }; self.hide()
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            if let self, event.window != self.panel, !self.isPointerOverStatusItem() { self.hide() }; return event
+            if let self, event.window != self.panel, !self.content.isTrackingMenu, !self.isPointerOverStatusItem() { self.hide() }; return event
         }
         item.button?.highlight(true)
     }

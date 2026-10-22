@@ -1,67 +1,43 @@
-# Distribution
+# Homebrew distribution
 
-Homebrew and npm install the same native app archive. The npm package is a small, dependency-free installer/launcher; it is not part of the running app. It does not run an install lifecycle script.
+Aervane ships as a native macOS app through [kirniy/tap](https://github.com/kirniy/homebrew-tap). No Node runtime or npm account is needed.
 
-The first public release is **not published yet**. Signing and npm account authentication must be completed before the commands below can install it.
-
-## Public commands
-
-After publication:
+The first public release is **not published yet**. Developer ID signing and notarization must be completed before this command can install it:
 
 ```sh
 brew install --cask kirniy/tap/aervane
 ```
 
-Or:
+The initial release targets Apple Silicon and macOS 14+. A tap provides an installation path without waiting for inclusion in Homebrew's central catalog. See [Homebrew taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
 
-```sh
-npx aervane install
-npx aervane open
-```
+## Signing
 
-Both channels initially target Apple Silicon and macOS 14+. A Homebrew tap provides an installation path without waiting for inclusion in Homebrew's central catalog. See [Homebrew taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
+Apple requires a **Developer ID Application** certificate, Hardened Runtime and a secure timestamp for notarization. The development certificate currently on this Mac is insufficient. The owner confirms an existing paid Apple Developer membership. Creating a Developer ID certificate requires the Account Holder role. [Apple's certificate instructions](https://developer.apple.com/help/account/certificates/create-developer-id-certificates), [notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
 
-## Signing account
-
-Apple requires a **Developer ID Application** certificate, Hardened Runtime and a secure timestamp for notarization. The development certificate currently available on the development Mac does not meet that requirement. Use an existing paid Apple Developer Program membership; do not buy or enroll automatically. Creating a Developer ID certificate requires the Account Holder role. [Apple's certificate instructions](https://developer.apple.com/help/account/certificates/create-developer-id-certificates), [notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
-
-Keep the private key in the local keychain. Configure notarization with `xcrun notarytool store-credentials aervane-notary`; supply credentials through its secure interactive prompt, never command history or repository files. API-key credentials are also supported. A release does not require uploading signing keys to GitHub.
+Keep the private key in the local keychain. Configure `xcrun notarytool store-credentials aervane-notary` through its secure interactive prompt, never command history or repository files. API-key credentials are also supported. The release does not require uploading signing keys to GitHub.
 
 ## Build and prepare
 
-Keep `VERSION` and `npm/package.json` at the same numeric version. Then, on the signing Mac:
+Set the numeric version in `VERSION`, then run on the signing Mac:
 
 ```sh
 swift test
-npm --prefix npm test
 SIGN_IDENTITY='Developer ID Application: …' NOTARY_PROFILE=aervane-notary tools/release.sh
 python3 tools/prepare-distribution.py
-cd dist/distribution/npm
-npm pack --dry-run
+brew style dist/distribution/aervane.rb
 ```
 
-`release.sh` signs the app and helper, submits the archive for notarization, staples the ticket and verifies the extracted archive. `prepare-distribution.py` checks app/helper signing teams, app identity/version, architecture, Gatekeeper and the stapled ticket before generating:
+`release.sh` signs the app and helper, submits the archive, staples the accepted ticket and verifies the extracted archive. `prepare-distribution.py` checks identity/version, matching app/helper signing teams, architecture, Gatekeeper and the stapled ticket before generating the versioned ZIP, SHA-256 checksum, release metadata and matching cask.
 
-- A versioned ZIP and SHA-256 checksum.
-- A matching Homebrew cask.
-- A prepared npm package containing the exact release URL, checksum and signing team.
+Ad hoc and development-signed archives are rejected. No placeholder checksums are published.
 
-An ad hoc or development-signed archive is rejected. No placeholder checksums are published. Installer tests cover checksum failures, download limits, signature failure before replacement, preservation of the old app and symlink destinations.
+## Publish and verify
 
-## Publish
+1. Publish the verified ZIP, `release.json` and `SHA256SUMS.txt` in GitHub release `v<VERSION>`.
+2. Push the generated `aervane.rb` into `Casks/` in `kirniy/homebrew-tap`.
+3. Run `brew update`, `brew audit --cask --online kirniy/tap/aervane`, then verify installation in a separate application directory.
+4. Check the downloaded archive checksum, extracted signature and notarization ticket before declaring the release ready.
 
-Publish the verified ZIP, `release.json` and `SHA256SUMS.txt` in the matching GitHub release `v<VERSION>`. Push the generated `aervane.rb` into `Casks/` in `kirniy/homebrew-tap`, then audit and test that cask. Publish from the generated npm directory, not the source `npm/` directory:
+Quit Aervane before upgrading; normal Quit restores automatic fan control. The cask's uninstall hook unregisters the signed helper after quitting the app. An unregistered or missing helper exits successfully without requiring a hardware probe. Setup may request macOS approval again when the new app opens.
 
-```sh
-npm login --auth-type=web
-cd dist/distribution/npm
-npm publish --access public
-```
-
-npm requires authenticated publishing with the applicable 2FA challenge. An npm login or publish challenge must be completed by the account owner; do not commit tokens or weaken account settings. [npm publishing authentication](https://docs.npmjs.com/requiring-2fa-for-package-publishing-and-settings-modification/).
-
-Verify the public release URL and checksum, registry version, Homebrew audit and an installation in an isolated application directory. Do not overwrite a running Aervane during these checks. The installer rejects a running app; normal Quit returns fan control to macOS.
-
-Upgrades unregister the previous signed helper only after the replacement is copied and verified. The old app must have the same signing team. Homebrew's uninstall hook also unregisters the helper after quitting the app. The app requests any required helper approval when opened again. A valid development signature or Gatekeeper acceptance on the development Mac alone does not establish notarization; the preparation tool requires Developer ID and a stapled ticket independently.
-
-Keep GitHub release assets immutable once published. A correction requires a new version. The native app does not poll for updates; `brew upgrade` or a newer npm installer performs an explicit upgrade.
+Keep release assets immutable after publication. A correction requires a new version. The app does not poll for updates; `brew upgrade --cask kirniy/tap/aervane` performs an explicit upgrade.

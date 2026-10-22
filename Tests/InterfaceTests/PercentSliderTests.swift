@@ -136,6 +136,21 @@ import XCTest
         XCTAssertEqual(control.transientAnimationCount, 0)
     }
 
+    /// The formation is one sequence (front + glint) that hiding settles,
+    /// leaving the formed crystals as static state.
+    func testFormationGlintIsTransientAndHidingSettlesIt() {
+        let (window, control) = hostedSlider(); _ = window
+        control.setPercent(80, animated: false)
+        control.setPercent(100, animated: true, celebrate: true)
+        XCTAssertTrue(control.layer?.sublayers?.contains { $0.animation(forKey: "glint") != nil } == true)
+        control.prepareForHiding()
+        XCTAssertTrue(control.isIceFormed)
+        XCTAssertEqual(control.transientAnimationCount, 0)
+        // A refresh at 100% while hidden never replays the formation.
+        control.setPercent(100, animated: false)
+        XCTAssertEqual(control.transientAnimationCount, 0)
+    }
+
     func testMeasuredSpeedIsSpokenWhenItDiffersFromTheRequest() {
         let (window, control) = hostedSlider(); _ = window
         control.setPercent(60, animated: false)
@@ -166,5 +181,72 @@ import XCTest
         XCTAssertFalse(auto.selected || manual.selected)
         XCTAssertEqual(auto.accessibilityLabel(), "Restore automatic fan control")
         XCTAssertEqual(manual.accessibilityLabel(), "Manual fan control")
+    }
+}
+
+@MainActor final class TemperatureHistoryTests: XCTestCase {
+    private func chart(_ samples: [Double]) -> TemperatureHistory {
+        let view = TemperatureHistory(frame: NSRect(x: 0, y: 0, width: 124, height: 40 + TemperatureHistory.readoutBand))
+        view.samples = samples
+        return view
+    }
+
+    func testInspectionReadsTheNearestSampleAndFollowsNewSamples() {
+        let view = chart([60, 61, 62, 98.8, 63])
+        view.inspect(atX: 0)
+        XCTAssertEqual(view.inspectedIndex, 0)
+        view.inspect(atX: 124)
+        XCTAssertEqual(view.inspectedIndex, 4)
+        view.inspect(atX: 3 + 118 * 0.75)
+        XCTAssertEqual(view.inspectedIndex, 3, "Pointing at the spike reads the spike")
+        // The pointer stays put while history scrolls; the readout follows the data under it.
+        view.samples = [61, 62, 98.8, 63, 64]
+        XCTAssertEqual(view.inspectedIndex, 3)
+        view.inspect(atX: nil)
+        XCTAssertFalse(view.isInspecting)
+    }
+
+    func testNothingToInspectWithoutATrendAndHidingEndsInspection() {
+        let view = chart([70])
+        view.inspect(atX: 60)
+        XCTAssertFalse(view.isInspecting, "A single sample has no trend to inspect")
+        view.samples = [70, 71]
+        view.inspect(atX: 60)
+        XCTAssertTrue(view.isInspecting)
+        view.endInspection()
+        XCTAssertFalse(view.isInspecting)
+        view.samples = []
+        XCTAssertFalse(view.isInspecting)
+    }
+
+    func testTrendIsDescribedForVoiceOver() {
+        let view = chart([64.2, 78.4, 73.1])
+        XCTAssertEqual(view.accessibilityLabel(), "Recent temperature, 64 to 78 °C, now 73")
+        view.fahrenheit = true
+        XCTAssertEqual(view.accessibilityLabel(), "Recent temperature, 148 to 173 °F, now 164")
+        XCTAssertEqual(chart([]).accessibilityLabel(), "Recent temperature trend")
+    }
+}
+
+@MainActor final class PresetEditorRowTests: XCTestCase {
+    func testRowLaysOutLongNamesWithoutCoveringTheSpeedOrDelete() {
+        let row = PresetEditorRow(index: 0) {}
+        row.frame = NSRect(x: 0, y: 0, width: 312, height: PresetEditorRow.height)
+        row.configure(name: "An overnight render", percent: 100, position: 1)
+        row.layout()
+        XCTAssertLessThanOrEqual(row.name.frame.maxX, row.value.frame.minX)
+        XCTAssertLessThanOrEqual(row.value.frame.maxX, row.remove.frame.minX)
+        XCTAssertLessThanOrEqual(row.remove.frame.maxX, row.bounds.maxX)
+        XCTAssertGreaterThanOrEqual(row.value.frame.width, ceil(("100" as NSString).size(withAttributes: [.font: Theme.number(12, .medium)]).width))
+        XCTAssertEqual(row.remove.accessibilityLabel(), "Delete An overnight render")
+        XCTAssertEqual(row.value.accessibilityLabel(), "Preset 1 speed")
+    }
+
+    func testFloorWarningIsShownAndCleared() {
+        let row = PresetEditorRow(index: 0) {}
+        row.showFloorWarning(true, minimum: 21)
+        XCTAssertEqual(row.value.toolTip, "Hardware minimum 21%")
+        row.showFloorWarning(false, minimum: 21)
+        XCTAssertNil(row.value.toolTip)
     }
 }

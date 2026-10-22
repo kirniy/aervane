@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-23T00:00:00+08:00",
+  "generatedAt": "2026-10-23T02:00:00+04:00",
   "title": "Design System: Aervane",
   "extensions": {
     "colorMeta": {
@@ -101,7 +101,7 @@
       {
         "name": "glide",
         "value": "200ms cubic-bezier(0.23,1,0.32,1)",
-        "purpose": "Thumb, fill, frost reveal and halo for pointer jumps, presets and model changes. Keyboard is instant."
+        "purpose": "Thumb, fill, frost reveal and halo for pointer jumps, preset clicks and model changes. Keyboard (arrows, 1-6, M) is instant."
       },
       {
         "name": "mode-pill",
@@ -110,13 +110,13 @@
       },
       {
         "name": "ice-formation",
-        "value": "620ms reveal + flake spring",
-        "purpose": "User reaching 100% cooling (Expressive only)."
+        "value": "620ms freezing front from the thumb to the crystal onset, one glint riding it",
+        "purpose": "A user reaching 100% cooling crystallises the top of the lattice (Expressive only)."
       },
       {
         "name": "melt",
-        "value": "280ms",
-        "purpose": "Ice crown recedes when cooling is lowered."
+        "value": "280ms ease-in-out fade from wherever the front is",
+        "purpose": "Crystals melt when cooling is lowered; an interrupted formation never snaps to full."
       },
       {
         "name": "release-sweep",
@@ -134,6 +134,31 @@
         "purpose": "Heat band change; a rising band breathes in once."
       },
       {
+        "name": "percent-roll",
+        "value": "220ms push",
+        "purpose": "Requested percentage turns over on a preset click; drags and keys never roll."
+      },
+      {
+        "name": "chill",
+        "value": "900ms ease-in-out per sample",
+        "purpose": "Cold air at the lower edge follows measured fan speed as the fan spins up or down."
+      },
+      {
+        "name": "trend-inspect",
+        "value": "120ms in, 180ms out; tracking is immediate",
+        "purpose": "Hairline, probe and exact value for the sample under the pointer."
+      },
+      {
+        "name": "key-acknowledge",
+        "value": "240ms fill flash, no movement",
+        "purpose": "A preset applied by its number key."
+      },
+      {
+        "name": "editor-row",
+        "value": "200ms rise 4pt + fade",
+        "purpose": "A newly added preset row settles in; focus edge 150ms."
+      },
+      {
         "name": "section-swap",
         "value": "260ms slide + 200ms fade",
         "purpose": "Fan section ↔ Settings."
@@ -147,12 +172,13 @@
   },
   "narrative": {
     "northStar": "The Native Instrument",
-    "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads; direct percentage control follows. Layout and controls carry state with minimal copy. Cooling power is rendered in ice, measured temperature in heat.",
+    "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads; direct percentage control follows. Layout and controls carry state with minimal copy. Point of view: warm light behind the glass, frost on it — heat glows behind the reading, measured airflow chills the lower edge, the cooling command frosts the slider.",
     "keyCharacteristics": [
       "Native AppKit glass",
+      "Heat behind the glass, frost on it",
       "Ice for cooling, heat for temperature",
       "Event-driven Core Animation only",
-      "Minimal copy"
+      "Keyboard-complete, minimal copy"
     ],
     "rules": [
       {
@@ -174,18 +200,26 @@
         "name": "The Two Families Rule",
         "body": "Cooling is never warm and heat is never icy.",
         "section": "colors"
+      },
+      {
+        "name": "The Measured Air Rule",
+        "body": "Atmosphere that describes the fan follows measured speed, never the request; requested speed lives on the slider.",
+        "section": "colors"
       }
     ],
     "dos": [
       "Keep temperature first and the direct percentage control immediately available.",
       "Preserve the hardware minimum and distinguish requested from measured speed.",
-      "Keep presets and settings inline."
+      "Keep presets and settings inline.",
+      "Let every core action work from the keyboard without capturing text-field keys.",
+      "Edit presets on a draft: Save stores, Cancel discards, closing the panel keeps edits."
     ],
     "donts": [
       "Do not add taglines, footers or section labels.",
       "Do not describe preview as applied.",
       "Do not add idle animation, timers or particles.",
-      "Do not let a heat state imply that manual control is blocked."
+      "Do not let a heat state imply that manual control is blocked.",
+      "Do not use literal snowflakes or decorative glow; frost is grain and crystal on the lattice."
     ]
   }
 }
