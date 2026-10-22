@@ -6,6 +6,7 @@
 
 - 113 tests pass: sensor decoding and discovery, fan limits, write order/settling/rollback, leases, journals, client deadlines, command queuing, optional timer behavior, native slider handlers and presentation rules.
 - Production app and helper compile, development signing succeeds, and `codesign --verify --deep --strict` passes.
+- The development ZIP was extracted and its signature checked again. Packaging omits filesystem resource metadata after a reproduced FinderInfo/resource-fork failure; `tools/release.sh` now checks the extracted archive as well as the original bundle.
 - The helper is approved, runs as administrator, and accepts the signed app over authenticated XPC.
 - Real 100% write: independent readback `F0Md=1`, `F0Tg=4900`. Actual speed settled near 4900 RPM after about six seconds. Starting hottest CPU sample: 98.8°C.
 - Restore: independent `F0Md=0`, then firmware reduced target and actual speed to about 1000 RPM.

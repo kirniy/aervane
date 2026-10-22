@@ -1,6 +1,6 @@
 # Aervane — development handoff
 
-Updated 2026-10-23. Repository: https://github.com/kirniy/aervane, branch `fix/fan-control`.
+Updated 2026-10-23. Repository: https://github.com/kirniy/aervane. The current implementation is on `main`; `fix/fan-control` retains the same repair and redesign history.
 
 ## Current user priorities
 
@@ -23,6 +23,7 @@ The UI now has progressive slider effects and ice forming at maximum cooling, te
 ## What is now verified
 
 - 113 tests pass on the actual Mac with Xcode 26.2. Production app/helper build and pass strict code-signature verification with the existing Apple development identity.
+- The signed development archive also passes strict signature verification after extraction. CI builds an ad hoc UI-preview archive and performs the same extraction check; it is not a notarized public installer.
 - Installed signed helper approval and authenticated XPC work.
 - Real 100% → Auto test: independent SMC read saw `F0Md=1`, `F0Tg=4900`; fan reached about 4900 RPM. Auto then read `F0Md=0`; firmware subsequently returned to about 1000 RPM. Initial hottest CPU sample was 98.8°C.
 - Actual UI Boost and Auto actions succeeded. After removing the temperature policy, UI Balanced 60% also succeeded: independent target 2940 RPM, actual 2941 RPM, manual mode. Hottest sample in that separate physical test was 92.1°C. Tests additionally cover 60% retention at 100°C and 129°C; do not describe these simulated temperatures as physical measurements.

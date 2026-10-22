@@ -11,15 +11,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test
         run: swift test
-      - name: Build unsigned release products
-        run: swift build -c release
-      - name: Archive products
-        run: |
-          mkdir -p dist
-          cp .build/release/Aervane dist/Aervane
-          cp .build/release/AervaneHelper dist/AervaneHelper
-          tar -czf dist/aervane-products.tar.gz -C dist Aervane AervaneHelper
+      - name: Build and verify ad hoc preview archive
+        run: tools/release.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: aervane-products
-          path: dist/aervane-products.tar.gz
+          name: aervane-ad-hoc-preview
+          path: dist/Aervane.app.zip
