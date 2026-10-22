@@ -1,0 +1,21 @@
+{
+  "name": "aervane",
+  "version": "0.2.0",
+  "description": "Install and open Aervane, a native macOS menu-bar temperature and fan app",
+  "type": "module",
+  "bin": { "aervane": "bin/aervane.mjs" },
+  "files": ["bin", "lib", "release.json", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "os": ["darwin"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/kirniy/aervane.git", "directory": "npm" },
+  "homepage": "https://github.com/kirniy/aervane",
+  "bugs": { "url": "https://github.com/kirniy/aervane/issues" },
+  "keywords": ["macos", "fan-control", "temperature", "menu-bar", "aervane"],
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "prepack": "node bin/check-release.mjs",
+    "prepublishOnly": "node bin/check-release.mjs"
+  }
+}

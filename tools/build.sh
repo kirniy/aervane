@@ -15,6 +15,11 @@ APP_ID="dev.kirniy.aervane"
 HELPER_ID="dev.kirniy.aervane.helper"
 BUILD_DIR="$ROOT/.build"
 APP="$ROOT/dist/Aervane.app"
+AERVANE_VERSION=$(<"$ROOT/VERSION")
+if [[ ! "$AERVANE_VERSION" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]]; then
+  echo 'VERSION must contain a numeric major.minor.patch version.' >&2
+  exit 1
+fi
 
 swift build -c "$CONFIG" --product Aervane
 swift build -c "$CONFIG" --product AervaneHelper
@@ -28,7 +33,7 @@ cp "$ROOT/Resources/Aervane.icns" "$APP/Contents/Resources/Aervane.icns"
 cp "$ROOT/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 cp "$ROOT/Resources/dev.kirniy.aervane.helper.plist" "$APP/Contents/Library/LaunchDaemons/dev.kirniy.aervane.helper.plist"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -36,8 +41,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>Aervane</string>
   <key>CFBundleName</key><string>Aervane</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$AERVANE_VERSION</string>
+  <key>CFBundleVersion</key><string>$AERVANE_VERSION</string>
   <key>CFBundleIconFile</key><string>Aervane</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

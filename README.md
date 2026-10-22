@@ -55,7 +55,7 @@ For a development-signed build, set `SIGN_IDENTITY` to an identity from `securit
 
 Start with [HANDOFF.md](HANDOFF.md) for current work, acceptance criteria, and validation gaps. [PRODUCT.md](PRODUCT.md) captures the brief; [DESIGN.md](DESIGN.md) records the native design system. See [hardware findings](docs/reverse-engineering.md), [model/key catalog](docs/compatibility/mfc-1.5.21/README.md), [verification](docs/verification.md), and [resource measurements](docs/performance.md).
 
-Homebrew packaging is staged in [`Casks/aervane.rb.in`](Casks/aervane.rb.in). A real checksum and release URL will be added after a distributable build is verified.
+The [Homebrew tap](https://github.com/kirniy/homebrew-tap) and [npm installer source](npm) are prepared. Public installation is waiting on Developer ID signing/notarization and npm account authentication. The [distribution runbook](docs/distribution.md) describes the verified-archive checks and publication steps; cask and npm metadata are generated together from one release.
 
 ### License
 

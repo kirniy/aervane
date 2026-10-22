@@ -191,10 +191,14 @@ if CommandLine.arguments.contains("--verify-control") {
     // Development maintenance for replacing an installed helper. Keep this
     // separate from normal launch; never disturb a running lease implicitly.
     do {
+        let installer = HelperInstaller()
+        if installer.status == .notRegistered || installer.status == .notFound {
+            print("Aervane helper is not registered."); exit(0)
+        }
         guard try SMCReader().readFan().automatic else {
             fputs("Restore Auto and quit Aervane before replacing the helper.\n", stderr); exit(1)
         }
-        try HelperInstaller().disable(); print("Aervane helper unregistered.")
+        try installer.disable(); print("Aervane helper unregistered.")
     }
     catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
 } else if CommandLine.arguments.contains("--probe") {

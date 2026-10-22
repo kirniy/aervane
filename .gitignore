@@ -11,3 +11,6 @@ xcuserdata/
 .impeccable/questions/
 *.p12
 *.mobileprovision
+__pycache__/
+npm/*.tgz
+npm/release.json

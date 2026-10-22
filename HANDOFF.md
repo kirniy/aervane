@@ -73,8 +73,12 @@ Set `SIGN_IDENTITY` for an Apple-signed helper build. The installed app is `/App
 
 ## Open validation and distribution work
 
+The next version is `0.2.0`, held in `VERSION` and `npm/package.json`. `tools/build.sh` uses it for the bundle version. `npm/` contains a dependency-free installer/launcher with eight passing tests. It verifies a pinned release checksum, Developer ID team, app version and Gatekeeper acceptance before replacement, refuses a running app and preserves the old app on preparation failure. The helper-unregister maintenance command now exits successfully without probing hardware when no helper is registered.
+
+`tools/prepare-distribution.py` generates the versioned archive metadata, real cask and prepared npm package only after checking Developer ID signatures for app/helper, architecture, Gatekeeper and the stapled ticket. A real development-signed archive was rejected as intended. The public `kirniy/homebrew-tap` repository exists and `brew tap kirniy/tap` was verified. No installable cask or npm package has been published yet. npm CLI authentication and a paid Apple Developer account/Developer ID certificate remain pending user input. Do not describe the prospective install commands as working until publication and fresh installation are checked.
+
 - Physical pointer drag, repeated actual status-item clicks, outside dismissal, rapid toggles and multiple monitors. Native handler regression tests and keyboard/accessibility paths pass; app-scoped CUA reports `AXError.notImplemented` for pointer drag/click on the custom slider. Do not claim a physical drag test.
 - Real VoiceOver, Reduce Motion/Transparency, light theme, 1× screens and long-content states.
 - Physical helper/app crash, sleep/wake and expired-lease scenarios beyond the controlled normal restoration tests.
 - More Mac models, multiple fans and Intel/alternate mode-key support.
-- Public Developer ID signing, notarization, release install and a real Brew cask. The current identity is development-only; `Casks/aervane.rb.in` remains a template.
+- Public Developer ID signing, notarization, release install and registry publication. The current identity is development-only; `Casks/aervane.rb.in` remains a template until the preparation checks succeed.
