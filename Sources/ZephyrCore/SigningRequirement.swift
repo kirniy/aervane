@@ -8,7 +8,9 @@ public enum SigningRequirement {
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
         var info: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(), &info) == errSecSuccess,
+        // TeamIdentifier is signing information, not part of the default
+        // dictionary. Request it explicitly or even a signed app appears unsigned.
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
               let dict = info as? [String: Any] else { return nil }
         return dict[kSecCodeInfoTeamIdentifier as String] as? String
     }

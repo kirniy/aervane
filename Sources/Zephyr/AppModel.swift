@@ -22,7 +22,9 @@ final class AppModel {
     var ownsControl = false
     var pendingPercent: Double?
     var helperReady = false
-    var panelVisible = false { didSet { schedulePoll() } }
+    var helperApprovalRequired = false
+    var setupMessage: String? { helperApprovalRequired ? "Allow Aervane in System Settings → Login Items. macOS may ask for your password." : nil }
+    var panelVisible = false { didSet { if panelVisible { nextReconnect = .distantPast }; schedulePoll() } }
     var presets: [FanPreset]
     var selectedSensor: String { didSet { UserDefaults.standard.set(selectedSensor, forKey: "sensor"); poll() } }
     var displayTemperature: Double?
@@ -50,7 +52,9 @@ final class AppModel {
         sleepObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in if self?.ownsControl == true { self?.restore() }; self?.timer?.cancel(); self?.timer = nil })
         sleepObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.schedulePoll() })
         schedulePoll()
-        if installer.status == .enabled { connectHelper() }
+        let status = installer.status
+        helperApprovalRequired = status == .requiresApproval
+        if status == .enabled { connectHelper() }
     }
     deinit { for observer in sleepObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }; timer?.cancel(); heartbeat?.invalidate() }
     func schedulePoll() {
@@ -60,7 +64,9 @@ final class AppModel {
     }
     private var polling = false
     func poll() {
-        guard !polling, !busy else { return }; polling = true
+        // Connecting to the helper must not pause read-only telemetry. Only
+        // an in-flight hardware command needs to exclude an overlapping poll.
+        guard !polling, !busy || !helperReady else { return }; polling = true
         let sensor = selectedSensor
         let generation = controlGeneration
         queue.async { [weak self] in
@@ -84,29 +90,46 @@ final class AppModel {
                     self.sample = snapshot; self.displayTemperature = temp
                     self.history.append(temp); if self.history.count > 60 { self.history.removeFirst(self.history.count - 60) }
                     if self.error?.hasPrefix("Sensor:") == true { self.error = nil }
-                    if self.ownsControl && (snapshot.automatic || (self.controlDeadline.map { $0 < .now } ?? false)) { self.restore() }
+                    if self.ownsControl && snapshot.automatic {
+                        // The helper may already have restored Auto after a
+                        // safety event. Readback confirms that transition; do
+                        // not repeatedly ask a released lease to restore again.
+                        self.ownsControl = false; self.controlDeadline = nil
+                        self.heartbeat?.invalidate(); self.heartbeat = nil
+                    } else if self.ownsControl && (self.controlDeadline.map { $0 < .now } ?? false) { self.restore() }
                 case .failure(let failure): self.error = "Sensor: \(failure.localizedDescription)"; self.displayTemperature = nil; if self.ownsControl { self.restore() }
                 }
                 self.changed?()
-                if !self.helperReady, !self.busy, Date() >= self.nextReconnect, self.installer.status == .enabled {
+                if !self.helperReady, !self.busy, Date() >= self.nextReconnect {
                     self.nextReconnect = Date().addingTimeInterval(10)
-                    self.connectHelper()
+                    let status = self.installer.status
+                    self.helperApprovalRequired = status == .requiresApproval
+                    if status == .enabled { self.connectHelper() }
+                    else { self.changed?() }
                 }
             }
         }
     }
     func enableControl() {
+        guard !busy else { return }
         error = nil; busy = true; changed?()
         if let other = competingApp {
             guard other.terminate() else { error = "Quit Macs Fan Control, then enable Aervane."; busy = false; changed?(); return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-                guard let self else { return }; if self.competingApp == nil { self.enableControl() } else { self.busy = false; self.error = "Macs Fan Control is still closing. Try Enable again."; self.changed?() }
+                guard let self else { return }; if self.competingApp == nil { self.busy = false; self.enableControl() } else { self.busy = false; self.error = "Macs Fan Control is still closing. Try Enable again."; self.changed?() }
             }; return
         }
-        do { try installer.enable(); connectHelper() }
-        catch { self.error = error.localizedDescription; busy = false; changed?(); if installer.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() } }
+        do {
+            let status = try installer.enable()
+            helperApprovalRequired = status == .requiresApproval
+            if helperApprovalRequired {
+                busy = false; changed?()
+                SMAppService.openSystemSettingsLoginItems()
+            } else { connectHelper() }
+        } catch { self.error = error.localizedDescription; busy = false; changed?() }
     }
     func connectHelper() {
+        busy = true; helperApprovalRequired = false
         controlGeneration &+= 1
         connectionGeneration = UUID(); let generation = connectionGeneration
         helper?.onDisconnect = nil; helper?.invalidate(); let client = HelperClient(); helper = client
@@ -151,7 +174,7 @@ final class AppModel {
         heartbeat = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.helper?.heartbeat { error in
                 if let error { DispatchQueue.main.async {
-                    guard let self, self.connectionGeneration == connection else { return }
+                    guard let self, self.connectionGeneration == connection, self.ownsControl else { return }
                     self.controlGeneration &+= 1
                     self.error = error.localizedDescription; self.helperReady = false; self.ownsControl = false
                     self.busy = false; self.controlDeadline = nil; self.heartbeat?.invalidate(); self.changed?()

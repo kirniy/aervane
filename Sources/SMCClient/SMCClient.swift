@@ -2,9 +2,10 @@ import Foundation
 import CSMC
 
 public struct SMCReading: Sendable { public let key: String; public let dataType: UInt32; public let bytes: [UInt8] }
-public enum SMCError: Error, CustomStringConvertible {
+public enum SMCError: Error, CustomStringConvertible, LocalizedError {
     case readFailed(String, Int32)
     public var description: String { if case let .readFailed(k,c) = self { return "AppleSMC read \(k) failed (\(c))" }; return "AppleSMC error" }
+    public var errorDescription: String? { description }
 }
 public final class SMCReader: @unchecked Sendable {
     // The C connection is shared by all readers in this process and closes
@@ -32,6 +33,12 @@ public final class SMCReader: @unchecked Sendable {
         public let maximumRPM: Double
         public let targetPercent: Double?
         public let automatic: Bool
+    }
+    public func readFanCount() throws -> Int {
+        let value = try read("FNum")
+        guard value.dataType == 0x75693820, value.bytes.count == 1,
+              let count = value.bytes.first, (1...10).contains(count) else { throw SMCError.readFailed("FNum", -6) }
+        return Int(count)
     }
     public func readFan(_ index: UInt32 = 0) throws -> FanState {
         guard index <= 9 else { throw SMCError.readFailed("fan", -1) }

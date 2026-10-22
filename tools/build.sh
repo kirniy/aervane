@@ -49,4 +49,7 @@ if [[ "$SIGN_TIMESTAMP" == enabled ]]; then timestamp_args=(--timestamp); fi
 codesign --force --identifier "$HELPER_ID" --options runtime "${timestamp_args[@]}" --sign "$SIGN_IDENTITY" "$APP/Contents/Library/LaunchDaemons/AervaneHelper"
 codesign --force --options runtime "${timestamp_args[@]}" --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+  "$APP/Contents/MacOS/Aervane" --check-signing
+fi
 echo "Built $APP"

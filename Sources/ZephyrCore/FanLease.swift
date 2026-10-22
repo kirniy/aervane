@@ -102,11 +102,20 @@ public final class FanRecoveryController {
         let wasOwner = state.owns(session)
         guard state.claim(session), !state.restorePending else { throw FanControlError.unavailable }
         var writeAttempted = false
+        var keepMaximumCooling = false
         do {
             let before = try driver.snapshot()
             lastValidSnapshot = before
-            guard !FanSafety.shouldRestoreAutomatic(snapshot: before, now: now(), lastHeartbeat: lastHeartbeat ?? now()) else {
+            guard FanSafety.hasReliableReading(before, now: now()),
+                  lastHeartbeat.map({ now().timeIntervalSince($0) <= FanSafety.leaseTimeout }) ?? true else {
                 throw FanControlError.staleSensor
+            }
+            guard before.fanCount == 1 else {
+                throw FanControlError.hardwareFailure("Manual control for multiple-fan Macs is not supported yet.")
+            }
+            if before.temperatureCelsius >= FanSafety.criticalTemperatureCelsius && requested != 100 {
+                keepMaximumCooling = wasOwner && FanSafety.isMaximumCooling(before)
+                throw FanControlError.tooHot(before.temperatureCelsius)
             }
             lastHeartbeat = now()
             try beforeWrite?(before)
@@ -116,7 +125,8 @@ public final class FanRecoveryController {
             lastValidSnapshot = after
             let expected = FanSafety.hardwareFloorClampedPercent(requested, snapshot: after)
             guard !after.automatic,
-                  FanSafety.matchesRequestedPercent(after.targetPercent, expected: expected) else {
+                  FanSafety.matchesRequestedPercent(after.targetPercent, expected: expected),
+                  !FanSafety.shouldRestoreAutomatic(snapshot: after, now: now(), lastHeartbeat: lastHeartbeat) else {
                 throw FanControlError.hardwareFailure("Fan target did not verify after setting.")
             }
             state.didSetManual(session)
@@ -126,7 +136,7 @@ public final class FanRecoveryController {
                 state.requestRestore(session)
                 _ = attemptRestore(session)
             }
-            if !writeAttempted && wasOwner && state.owns(session) {
+            if !writeAttempted && wasOwner && state.owns(session) && !keepMaximumCooling {
                 state.requestRestore(session)
                 _ = attemptRestore(session)
             } else if !writeAttempted && !wasOwner && state.owns(session) {
@@ -147,7 +157,7 @@ public final class FanRecoveryController {
         return FanSnapshot(currentRPM: fan.currentRPM, minimumRPM: fan.minimumRPM,
                            maximumRPM: fan.maximumRPM, targetPercent: fan.targetPercent,
                            automatic: true, temperatureCelsius: previous.temperatureCelsius,
-                           sampledAt: previous.sampledAt)
+                           sampledAt: previous.sampledAt, fanCount: previous.fanCount)
     }
 
     public func tick() {
@@ -157,6 +167,10 @@ public final class FanRecoveryController {
             state.requestRestore(owner); _ = attemptRestore(owner); return
         }
         lastValidSnapshot = snapshot
+        if snapshot.automatic {
+            state.restoreConfirmed(owner); lastHeartbeat = nil
+            return
+        }
         if FanSafety.shouldRestoreAutomatic(snapshot: snapshot, now: now(), lastHeartbeat: lastHeartbeat) {
             state.requestRestore(owner); _ = attemptRestore(owner)
         }

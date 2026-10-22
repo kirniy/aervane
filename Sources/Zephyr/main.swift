@@ -1,5 +1,6 @@
 import AppKit
 import SMC
+import ZephyrCore
 
 final class MenuPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -54,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
             editMenu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
         }
-        let redo = NSMenuItem(title: "Redo", action: Selector("redo:"), keyEquivalent: "z")
+        let redo = NSMenuItem(title: "Redo", action: NSSelectorFromString("redo:"), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]; editMenu.insertItem(redo, at: 1)
         edit.submenu = editMenu; menu.addItem(edit)
         NSApp.mainMenu = menu
@@ -115,9 +116,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-if CommandLine.arguments.contains("--probe") {
+if CommandLine.arguments.contains("--verify-control") {
+    verifyFanControl()
+} else if CommandLine.arguments.contains("--check-signing") {
+    // Used by the signed build check. No service registration or fan writes.
+    guard let team = SigningRequirement.currentTeamIdentifier(),
+          SigningRequirement.requirement(identifier: HelperClient.serviceName) != nil else {
+        fputs("Aervane cannot read its Apple signing identity.\n", stderr); exit(1)
+    }
+    print("Apple signing identity verified: \(team)")
+} else if CommandLine.arguments.contains("--unregister-helper") {
+    // Development maintenance for replacing an installed helper. Keep this
+    // separate from normal launch; never disturb a running lease implicitly.
+    do {
+        guard try SMCReader().readFan().automatic else {
+            fputs("Restore Auto and quit Aervane before replacing the helper.\n", stderr); exit(1)
+        }
+        try HelperInstaller().disable(); print("Aervane helper unregistered.")
+    }
+    catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
+} else if CommandLine.arguments.contains("--probe") {
     let reader = SMCReader()
-    do { let fan = try reader.readFan(); let temp = try reader.readCPUTemperature(); print("CPU \(String(format: "%.1f", temp))°C | Fan \(Int((fan.currentRPM / fan.maximumRPM * 100).rounded()))% | Minimum \(Int(ceil(fan.minimumRPM / fan.maximumRPM * 100)))% | \(fan.automatic ? "Auto" : "Manual")") }
+    do {
+        let fan = try reader.readFan(), temp = try reader.readCPUTemperature(), hottest = try reader.readCPUHottestTemperature()
+        let target = fan.targetPercent.map { String(format: "%.1f%%", $0) } ?? "Auto"
+        print("CPU \(String(format: "%.1f", temp))°C | Hottest \(String(format: "%.1f", hottest))°C | Fan \(Int((fan.currentRPM / fan.maximumRPM * 100).rounded()))% | Target \(target) | Minimum \(Int(ceil(fan.minimumRPM / fan.maximumRPM * 100)))% | \(fan.automatic ? "Auto" : "Manual")")
+    }
     catch { fputs("\(error)\n", stderr); exit(1) }
 } else {
     let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.run()

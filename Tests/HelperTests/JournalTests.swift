@@ -28,6 +28,25 @@ final class JournalTests: XCTestCase {
     private func journal(_ phase: LeaseJournalPhase = .beforeWrite) -> LeaseJournal {
         LeaseJournal(sessionID: UUID(), previousTargetPercent: 60, intendedPercent: 80, phase: phase, processID: 123)
     }
+    func testHeartbeatRejectsNonownerAndReleasedLease() {
+        let hardware = RecoveryHardware()
+        let controller = FanControlController(driver: hardware, journalURL: journalURL, requireRootJournal: false)
+        let owner = UUID(), nonowner = expectation(description: "unowned heartbeat")
+        controller.heartbeat(session: owner) { error in XCTAssertNotNil(error); nonowner.fulfill() }
+        wait(for: [nonowner], timeout: 2)
+        let set = expectation(description: "manual control")
+        controller.set(percent: 60, session: owner) { _, error in XCTAssertNil(error); set.fulfill() }
+        wait(for: [set], timeout: 2)
+        let live = expectation(description: "owned heartbeat")
+        controller.heartbeat(session: owner) { error in XCTAssertNil(error); live.fulfill() }
+        wait(for: [live], timeout: 2)
+        let restored = expectation(description: "automatic control")
+        controller.restore(session: owner) { _, error in XCTAssertNil(error); restored.fulfill() }
+        wait(for: [restored], timeout: 2)
+        let released = expectation(description: "released heartbeat")
+        controller.heartbeat(session: owner) { error in XCTAssertNotNil(error); released.fulfill() }
+        wait(for: [released], timeout: 2)
+    }
     func testRejectedSecondSessionPreservesActiveJournal() throws {
         let hardware = RecoveryHardware()
         let controller = FanControlController(driver: hardware, journalURL: journalURL, requireRootJournal: false)

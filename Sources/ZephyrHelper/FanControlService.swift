@@ -1,22 +1,59 @@
 import Foundation
+import OSLog
 import ZephyrCore
 
 final class FanControlService: NSObject, FanControlXPCProtocol {
+    private static let logger = Logger(subsystem: "dev.kirniy.aervane.helper", category: "fan-control")
     private let sessionID = UUID()
     private let controller = FanControlController.shared
     static func bootstrap() { FanControlController.initialize() }
 
     func clientDisconnected() { controller.disconnected(sessionID) }
     func start() {}
-    func snapshot(withReply reply: @escaping (Data?, Error?) -> Void) { controller.snapshot(reply) }
+    func snapshot(withReply reply: @escaping (Data?, Error?) -> Void) {
+        controller.snapshot { data, error in reply(data, error.map(Self.xpcError)) }
+    }
     func setFanPercent(_ percent: Double, withReply reply: @escaping (Data?, Error?) -> Void) {
-        controller.set(percent: percent, session: sessionID, reply: reply)
+        controller.set(percent: percent, session: sessionID) { data, error in
+            if let error {
+                Self.logger.error("Fan set failed: \(error.localizedDescription, privacy: .public)")
+            } else {
+                Self.logger.info("Fan set succeeded")
+            }
+            reply(data, error.map(Self.xpcError))
+        }
     }
     func restoreAutomatic(withReply reply: @escaping (Data?, Error?) -> Void) {
-        controller.restore(session: sessionID, reply: reply)
+        controller.restore(session: sessionID) { data, error in
+            if let error {
+                Self.logger.error("Automatic restore failed: \(error.localizedDescription, privacy: .public)")
+            } else {
+                Self.logger.info("Automatic restore succeeded")
+            }
+            reply(data, error.map(Self.xpcError))
+        }
     }
     func heartbeat(withReply reply: @escaping (Error?) -> Void) {
-        controller.heartbeat(session: sessionID, reply: reply)
+        controller.heartbeat(session: sessionID) { error in reply(error.map(Self.xpcError)) }
+    }
+
+    static func xpcError(_ error: Error) -> NSError {
+        if let error = error as? FanControlError {
+            let code: Int
+            switch error {
+            case .invalidPercent: code = 1
+            case .unavailable: code = 2
+            case .staleSensor: code = 3
+            case .hardwareFailure: code = 4
+            case .unauthorized: code = 5
+            case .tooHot: code = 6
+            }
+            return NSError(domain: "dev.kirniy.aervane.FanControl", code: code,
+                           userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? "Fan control failed."])
+        }
+        let nsError = error as NSError
+        return NSError(domain: nsError.domain, code: nsError.code,
+                       userInfo: [NSLocalizedDescriptionKey: nsError.localizedDescription])
     }
 }
 
@@ -28,7 +65,7 @@ private final class SMCRecoveryDriver: FanRecoveryDriver {
         let temperature = try FanSafety.validateTemperature(hardware.hottestTemperature())
         return FanSnapshot(currentRPM: reading.currentRPM, minimumRPM: reading.minimumRPM,
                            maximumRPM: reading.maximumRPM, targetPercent: reading.targetPercent,
-                           automatic: reading.automatic, temperatureCelsius: temperature)
+                           automatic: reading.automatic, temperatureCelsius: temperature, fanCount: reading.fanCount)
     }
 
     func fanSnapshot() throws -> FanReadback {
@@ -132,7 +169,9 @@ final class FanControlController {
 
     func heartbeat(session: UUID, reply: @escaping (Error?) -> Void) {
         queue.async { [weak self] in
-            self?.policy.heartbeat(session)
+            guard let self, self.policy.state.owns(session), self.policy.state.manual,
+                  !self.policy.state.restorePending else { reply(FanControlError.unavailable); return }
+            self.policy.heartbeat(session)
             reply(nil)
         }
     }

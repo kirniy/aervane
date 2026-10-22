@@ -130,7 +130,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
             if apply { layoutSettings(at: y + 8, margin: m, width: w) }
             y += 8 + 166 + 16
         }
-        if model.error != nil {
+        if model.error != nil || model.setupMessage != nil {
             let height = min(48, max(16, ceil(message.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: w, height: 200)).height ?? 32)))
             put(message, m, y, w, height); y += height + 12
         }
@@ -178,13 +178,14 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         settingsButton.selected = settingsOpen
 
         enableButton.isHidden = !needsSetup; enableButton.isEnabled = !model.busy
-        enableButton.title = model.busy && !model.helperReady ? "Connecting…" : model.pendingPercent.map { "Set up & apply \(Int($0.rounded()))%" } ?? "Set up fan control"
+        enableButton.title = model.busy && !model.helperReady ? "Connecting…" : model.helperApprovalRequired ? "Approve in System Settings" : model.pendingPercent.map { "Set up & apply \(Int($0.rounded()))%" } ?? "Set up fan control"
         enableButton.setAccessibilityLabel(enableButton.title)
-        message.stringValue = model.error ?? ""; message.isHidden = model.error == nil
+        message.stringValue = model.error ?? model.setupMessage ?? ""; message.isHidden = message.stringValue.isEmpty
+        message.textColor = model.error == nil ? Theme.secondary : Theme.caution
         if let deadline = model.controlDeadline, model.ownsControl { footer.stringValue = "Returns to Auto in \(max(1, Int(deadline.timeIntervalSinceNow / 60))) min" }
         else { footer.stringValue = model.helperReady ? "Live readings · Auto restored on quit" : "Live readings · nothing applied until setup" }
 
-        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorViews.count)|\(presetButtons.count)|\(model.error ?? "")|\(temperature.stringValue)\(unit.stringValue)"
+        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorViews.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)"
         if key != layoutKey { layoutKey = key; needsLayout = true }
         resize?(desiredHeight)
     }
