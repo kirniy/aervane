@@ -1,0 +1,254 @@
+{
+  "schema": "aervane.compatibility.mfc-control/v1",
+  "source": {
+    "version": "1.5.21",
+    "build": "82",
+    "binary_sha256": "65146b1964ae6f5a37f87c00ea9bd3b1d9a51265f72f022fbb0c3458487da8b3",
+    "analyzed_architecture": "arm64"
+  },
+  "initialized_constants": [
+    {
+      "value": "#KEY",
+      "kind": "smc_identifier",
+      "purpose": "key count",
+      "slot": "0x1002d5358",
+      "seed_function": "0x1001e51f8",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_18df9e7baecd917923438a96607028a3d44498af30ce49f427fa156c9964b29d"
+      ]
+    },
+    {
+      "value": "FNum",
+      "kind": "smc_identifier",
+      "purpose": "fan count",
+      "slot": "0x1002d5360",
+      "seed_function": "0x1001e525c",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_4ee075fad9050050f875fad28652e70a829d3df8014f886b1a5bda2436c19fa9"
+      ]
+    },
+    {
+      "value": "FS! ",
+      "kind": "smc_identifier",
+      "purpose": "aggregate manual-mode mask",
+      "slot": "0x1002d5368",
+      "seed_function": "0x1001e52c0",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_650ca6c146d11c90fec59e54c276e6ee0306ead1e5bd8e5c472569a9ffac6ab8"
+      ]
+    },
+    {
+      "value": "F{}ID",
+      "kind": "smc_identifier",
+      "purpose": "per-fan identifier",
+      "slot": "0x1002d5370",
+      "seed_function": "0x1001e5324",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_8f9a64847e2dc6586dd3774213abeebbc6bc7c4f37b9e423ad1a676443efbd2f"
+      ]
+    },
+    {
+      "value": "F{}Mn",
+      "kind": "smc_identifier",
+      "purpose": "minimum fan speed",
+      "slot": "0x1002d5378",
+      "seed_function": "0x1001e5394",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_7644aa837b395812d9f6d22311588ada0ac0c50104ee029eac84de5683a1b68d"
+      ]
+    },
+    {
+      "value": "F{}Mx",
+      "kind": "smc_identifier",
+      "purpose": "maximum fan speed",
+      "slot": "0x1002d5380",
+      "seed_function": "0x1001e5404",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_57054e4503241a80aa424fed0a67ac949556bff1d375c3a1878837add2a51940"
+      ]
+    },
+    {
+      "value": "F{}Ac",
+      "kind": "smc_identifier",
+      "purpose": "actual fan speed",
+      "slot": "0x1002d5388",
+      "seed_function": "0x1001e5474",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_1fa2c46cd846d2a875c3401129e1ec1989326bca3cbf9783014fe56fef17f22a"
+      ]
+    },
+    {
+      "value": "F{}Tg",
+      "kind": "smc_identifier",
+      "purpose": "target fan speed",
+      "slot": "0x1002d5390",
+      "seed_function": "0x1001e54e4",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_bf5f0f86f179b035c4b21d705b34f9142f6022b56f238507ca28f12b4bc0f18d"
+      ]
+    },
+    {
+      "value": "F{}Sf",
+      "kind": "smc_identifier",
+      "purpose": "per-fan identifier; exact role not established in this pass",
+      "slot": "0x1002d5398",
+      "seed_function": "0x1001e5554",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_2a4b4ae4071f9f81e215702d2be48c4087f515492c1749c9b57e3d6814a608d8"
+      ]
+    },
+    {
+      "value": "F{}Md",
+      "kind": "smc_identifier",
+      "purpose": "default per-fan mode spelling",
+      "slot": "0x1002d53a0",
+      "seed_function": "0x1001e55c4",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380"
+      ]
+    },
+    {
+      "value": "F{}md",
+      "kind": "smc_identifier",
+      "purpose": "newer alternate per-fan mode spelling",
+      "slot": "0x1002d53a8",
+      "seed_function": "0x1001e5634",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380"
+      ]
+    },
+    {
+      "value": "Ftst",
+      "kind": "smc_identifier",
+      "purpose": "additional aggregate control flag on selected models",
+      "slot": "0x1002d53b0",
+      "seed_function": "0x1001e56a4",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380"
+      ]
+    },
+    {
+      "value": "LKSB",
+      "kind": "smc_identifier",
+      "purpose": "initialized SMC identifier; purpose not established in this pass",
+      "slot": "0x1002d53b8",
+      "seed_function": "0x1001e5708",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_6e9349cd70c32613d34d3f1b3c86973048b1f4782ed90643984f29a00dd8088b"
+      ]
+    },
+    {
+      "value": "sp78",
+      "kind": "data_type",
+      "purpose": "signed fixed-point temperature data type",
+      "slot": "0x1002d53c0",
+      "seed_function": "0x1001e576c",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_fd93b7c42c3b27b8a4f4ae9721bf2b0287b99d9024b5352b70b041f91e5c3ab4"
+      ]
+    },
+    {
+      "value": "flt ",
+      "kind": "data_type",
+      "purpose": "floating-point data type",
+      "slot": "0x1002d53c8",
+      "seed_function": "0x1001e57d0",
+      "evidence": [
+        "ev_0855cd30b486ed2e1cfc3f98f1b2204929a69a19e84545a992b8767b6ed56380",
+        "ev_618fa876190908091a4e6face92317f0b3c5e944fe7728bd45e6094b71ce5a6b"
+      ]
+    }
+  ],
+  "additional_data_types": [
+    {
+      "value": "fpe2",
+      "purpose": "two-byte fan speed encoding",
+      "evidence": "ev_13c5a9f6f30dd064685507edcd232fa544344a493afc4c0d3452b3ac12002f1e"
+    }
+  ],
+  "model_family_enums": {
+    "0": "MacBook",
+    "1": "MacBookAir",
+    "2": "MacBookNeo",
+    "3": "MacBookPro",
+    "4": "iMac",
+    "5": "iMacPro",
+    "6": "Macmini",
+    "7": "MacStudio",
+    "8": "MacPro",
+    "9": "Xserve",
+    "10": "ADP"
+  },
+  "model_version_encoding": "Normalize model through alias table; parser removes non-digit characters from internal identifier and parses the remaining decimal integer. Case in source selectors is preserved.",
+  "predicates": [
+    {
+      "name": "requiresNewSMCKeyForManualControl",
+      "expression": "family == MacBookPro and version > 201",
+      "effect": "model path uses Ftst after per-fan mode changes",
+      "evidence": "ev_4a5f4f5d95d5072ef02e17a9b7f53e572d60cb543918b45be27967bbb6dbaa88"
+    },
+    {
+      "name": "requiresNewF0mdForManualControl",
+      "expression": "(family == MacBookPro and version > 220) or (family == MacStudio and version > 30)",
+      "effect": "select lowercase F{}md instead of F{}Md",
+      "evidence": "ev_94807c3b707f60a77c580204e9f1dd83738b67aa39c2f9ddb49ab8d6915ffdb1"
+    },
+    {
+      "name": "isModelNotWorking",
+      "expression": "family == MacBookPro and 202 <= version <= 215",
+      "effect": "vendor predicate only; its existence is not proof that all fan-control operations fail on those models",
+      "evidence": "ev_b83b33d51c691c1b38df3aaaa5fee75877a87b1ec1e82e8141a0841c01da53da"
+    },
+    {
+      "name": "hasZeroRpmMode",
+      "expression": "(family == MacBookAir and version == 81) or (family == MacBookPro and (version in [121,131,132,141,142,152,162,163] or version > 170))",
+      "effect": "static capability predicate; actual firmware limits still require probing",
+      "evidence": "ev_0dff30217c26d7939051cd86c7cfb7edb5692555e783ed69af60b86052ea211f"
+    },
+    {
+      "name": "canTurnOffFans",
+      "expression": "(family == MacBookAir and version == 81) or (family == MacBookPro and (121 <= version <= 132 or 141 <= version <= 142 or version in [152,162,163] or version > 170))",
+      "effect": "static capability predicate; not permission to write zero below runtime minimum",
+      "evidence": "ev_62d9c75d48f6a841bccdc2cfbacb702276e8424179db52c47cf515a1d03a53d0"
+    },
+    {
+      "name": "modelHasNoFans",
+      "expression": "(family == MacBook and version in [81,91,101]) or (family == MacBookAir and version > 100) or family == MacBookNeo",
+      "effect": "static fanless-model predicate",
+      "evidence": "ev_1ddf6e5bee2688a8556f0672fd9d16cd6c3ccc548f427428c6823b7a267c8ead"
+    },
+    {
+      "name": "isT2Chip",
+      "expression": "false in the analyzed arm64 implementation",
+      "effect": "does not establish Intel implementation behavior",
+      "evidence": "ev_5517144b9908aace98c043cbbe9a85d2df8fc8724b06c036bbcc7eaa35d30ed7"
+    }
+  ],
+  "write_sequence": {
+    "steps": [
+      "setFansControlModes",
+      "setFanRPM"
+    ],
+    "evidence": [
+      "ev_188e092159581d8401c68a40473d1c2dc10eaa0d38b32491173d2d4069143965",
+      "ev_3124a0aec46403fdd64ce129733cf3a66c6fe2d6c0eb0b7b7e631ef056960be0"
+    ]
+  },
+  "limits": [
+    "Runtime SMC key enumeration may discover identifiers beyond the embedded catalog.",
+    "Only the arm64 control routines were analyzed; shared sensor resources were verified in both slices.",
+    "Aervane hardware control is validated on one Mac16,10, not every model in these tables.",
+    "All inequalities above were checked against branch instructions, not only pseudocode."
+  ]
+}

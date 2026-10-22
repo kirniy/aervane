@@ -26,6 +26,36 @@ final class SMCTests: XCTestCase {
         }
         XCTAssertEqual(try reader.readCPUHottestTemperature(), 74)
     }
+    func testMac16_10UsesAllTenMappedCPUSensorsIncludingTe0UAndTe0V() throws {
+        let keys = ["Tp01", "Tp05", "Tp09", "Tp0D", "Te05", "Te09", "Te0H", "Te0S", "Te0U", "Te0V"]
+        let reader = SMCReader(read: { key in
+            guard let index = keys.firstIndex(of: key) else { throw SMCError.readFailed(key, -4) }
+            return self.floating(key, Float(60 + index))
+        }, model: "Mac16,10")
+        XCTAssertEqual(try reader.readCPUTemperature(), 64.5, accuracy: 0.001)
+        XCTAssertEqual(try reader.readCPUHottestTemperature(), 69, accuracy: 0.001)
+    }
+    func testMac16_10GPUUsesMappedKeysOnly() throws {
+        let reader = SMCReader(read: { key in
+            switch key {
+            case "Tg04": return self.floating(key, 70)
+            case "Tg12": return self.floating(key, 74)
+            case "Tg0D": return self.floating(key, 110)
+            default: throw SMCError.readFailed(key, -4)
+            }
+        }, model: "Mac16,10")
+        XCTAssertEqual(try reader.readGPUTemperature(), 72, accuracy: 0.001)
+    }
+    func testGPUDiscoveryRecoversAfterTransientReadFailure() throws {
+        var available = false
+        let reader = SMCReader(read: { key in
+            guard available, key == "Tg04" else { throw SMCError.readFailed(key, -4) }
+            return self.floating(key, 70)
+        }, model: "Mac16,10")
+        XCTAssertThrowsError(try reader.readGPUTemperature())
+        available = true
+        XCTAssertEqual(try reader.readGPUTemperature(), 70)
+    }
     func testFanSpeedPayloadsHaveExactTypesAndLengths() throws {
         XCTAssertEqual(try SMCReader.decodeFanSpeed(SMCReading(key: "F0Ac", dataType: 0x66706532, bytes: [0x2E, 0xE0])), 3000)
         XCTAssertThrowsError(try SMCReader.decodeFanSpeed(SMCReading(key: "F0Ac", dataType: 0x66706532, bytes: [0, 1, 2])))

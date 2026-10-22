@@ -137,46 +137,52 @@ int zsmc_target_rpm(double minimum, double maximum, double percent, double *targ
     return KERN_SUCCESS;
 }
 
-int zsmc_set_fan_percent(uint32_t fan_index, double percent) {
-    if (!isfinite(percent) || percent < 0.0 || percent > 100.0 || fan_index > 9) return kIOReturnBadArgument;
-    char min_key[5], max_key[5], target_key[5], mode_key[5];
+static int read_fan_limits(uint32_t fan_index, float *minimum, float *maximum) {
+    char min_key[5], max_key[5];
     snprintf(min_key, sizeof(min_key), "F%uMn", fan_index); snprintf(max_key, sizeof(max_key), "F%uMx", fan_index);
-    snprintf(target_key, sizeof(target_key), "F%uTg", fan_index); snprintf(mode_key, sizeof(mode_key), "F%uMd", fan_index);
-    // Never assume a mode key exists: Apple models differ and a missing mode
-    // key means we cannot safely claim manual control.
-    uint8_t current_mode = 0; size_t mode_length = 0; uint32_t mode_type = 0;
-    int mode_result = zsmc_read_key_name(mode_key, &current_mode, sizeof(current_mode), &mode_length, &mode_type);
-    if (mode_result != KERN_SUCCESS || mode_length != 1 || mode_type != 0x75693820 || (current_mode != 0 && current_mode != 1 && current_mode != 3)) return mode_result ? mode_result : kIOReturnUnsupported;
-    float min_value = 0, max_value = 0;
-    int result = read_named_float(min_key, &min_value); if (result) return result;
-    result = read_named_float(max_key, &max_value); if (result) return result;
-    if (!isfinite(min_value) || !isfinite(max_value) || min_value < 0.0f ||
-        max_value <= 0.0f || min_value > max_value)
+    int result = read_named_float(min_key, minimum); if (result) return result;
+    result = read_named_float(max_key, maximum); if (result) return result;
+    if (!isfinite(*minimum) || !isfinite(*maximum) || *minimum < 0.0f || *maximum <= 0.0f || *minimum > *maximum)
         return kIOReturnBadArgument;
-    double mapped_target = 0;
-    result = zsmc_target_rpm(min_value, max_value, percent, &mapped_target); if (result) return result;
-    float target = (float)mapped_target;
-    // Stage the target while automatic control remains active, then switch to
-    // manual mode so a failed target write cannot leave an old manual target.
-    ZSMCKeyInfo target_info; result = zsmc_key_info(key_code(target_key), &target_info); if (result) return result;
-    if (target_info.dataType == 0x666c7420 && target_info.dataSize == 4)
-        result = zsmc_write_key_name(target_key, &target, sizeof(target), 0x666c7420);
-    else if (target_info.dataType == 0x66706532 && target_info.dataSize == 2 && target <= 16383.75f) {
-        uint16_t raw = (uint16_t)lroundf(target * 4.0f);
-        uint8_t encoded[2] = { raw >> 8, raw & 0xff };
-        result = zsmc_write_key_name(target_key, encoded, 2, 0x66706532);
-    } else return kIOReturnUnsupported;
-    if (result) return result;
-    uint8_t mode = 1;
-    return zsmc_write_key_name(mode_key, &mode, sizeof(mode), 0x75693820);
+    return KERN_SUCCESS;
 }
 
-int zsmc_set_fan_automatic(uint32_t fan_index) {
-    if (fan_index > 9) return kIOReturnBadArgument;
+// Reads the mode key and requires the observed one-byte ui8 encoding with a
+// known value. A missing or unfamiliar mode key means control is unsupported.
+static int read_fan_mode(const char *mode_key, uint8_t *mode) {
+    size_t length = 0; uint32_t type = 0;
+    int result = zsmc_read_key_name(mode_key, mode, 1, &length, &type);
+    if (result != KERN_SUCCESS) return result;
+    if (length != 1 || type != 0x75693820 || (*mode != 0 && *mode != 1 && *mode != 3)) return kIOReturnUnsupported;
+    return KERN_SUCCESS;
+}
+
+int zsmc_write_fan_target(uint32_t fan_index, double rpm) {
+    if (fan_index > 9 || !isfinite(rpm)) return kIOReturnBadArgument;
+    float minimum = 0, maximum = 0;
+    int result = read_fan_limits(fan_index, &minimum, &maximum); if (result) return result;
+    // Callers compute the target from these same limits; allow only float
+    // rounding beyond them, never an out-of-range speed.
+    if (rpm < (double)minimum - 1.0 || rpm > (double)maximum + 1.0) return kIOReturnBadArgument;
+    float target = (float)fmax(minimum, fmin(maximum, rpm));
+    char target_key[5]; snprintf(target_key, sizeof(target_key), "F%uTg", fan_index);
+    ZSMCKeyInfo info; result = zsmc_key_info(key_code(target_key), &info); if (result) return result;
+    if (info.dataType == 0x666c7420 && info.dataSize == 4)
+        return zsmc_write_key_name(target_key, &target, sizeof(target), 0x666c7420);
+    if (info.dataType == 0x66706532 && info.dataSize == 2 && target <= 16383.75f) {
+        uint16_t raw = (uint16_t)lroundf(target * 4.0f);
+        uint8_t encoded[2] = { raw >> 8, raw & 0xff };
+        return zsmc_write_key_name(target_key, encoded, 2, 0x66706532);
+    }
+    return kIOReturnUnsupported;
+}
+
+int zsmc_write_fan_mode(uint32_t fan_index, uint8_t mode) {
+    // Only automatic (0) and manual (1) are ever written. Mode 3 is observed
+    // as a firmware-managed state, not something Aervane requests.
+    if (fan_index > 9 || (mode != 0 && mode != 1)) return kIOReturnBadArgument;
     char mode_key[5]; snprintf(mode_key, sizeof(mode_key), "F%uMd", fan_index);
-    uint8_t current_mode = 0; size_t mode_length = 0; uint32_t mode_type = 0;
-    int mode_result = zsmc_read_key_name(mode_key, &current_mode, sizeof(current_mode), &mode_length, &mode_type);
-    if (mode_result != KERN_SUCCESS || mode_length != 1 || mode_type != 0x75693820 || (current_mode != 0 && current_mode != 1 && current_mode != 3)) return mode_result ? mode_result : kIOReturnUnsupported;
-    uint8_t mode = 0;
+    uint8_t current = 0;
+    int result = read_fan_mode(mode_key, &current); if (result) return result;
     return zsmc_write_key_name(mode_key, &mode, sizeof(mode), 0x75693820);
 }

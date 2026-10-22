@@ -161,18 +161,19 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         if let held = hold, !model.busy, abs(model.shownPercent - held.value) < 1.5 || model.error != nil || held.until < Date() { hold = nil }
         // A sample refresh never moves the thumb under the user's pointer/keys.
         if !slider.isInteracting {
-            slider.isEnabled = !model.stale && !model.busy
+            // Stays draggable while a command is in flight: the model queues
+            // the newest value instead of dropping input.
+            slider.isEnabled = !model.stale
             let value = (hold?.value ?? model.shownPercent).rounded()
             if abs(slider.percent - value) >= 0.5 { slider.setPercent(value, animated: window?.isVisible == true) }
             showReadout(slider.percent)
         }
         floorLabel.stringValue = model.sample == nil ? "" : model.minimumPercent > 0 ? "\(Int(model.minimumPercent))% hardware minimum" : "0% · fan can stop"
 
-        let previewing = model.pendingPercent != nil
+        let previewing = model.requestedPercent != nil
         autoButton.selected = model.sample?.automatic == true && !model.ownsControl && !previewing
-        autoButton.isEnabled = !model.busy
         manualButton.selected = model.ownsControl || previewing
-        manualButton.isEnabled = !model.stale && !model.busy
+        manualButton.isEnabled = !model.stale
         syncPresets()
         editButton.title = editing ? "Done" : "Edit"; editButton.setAccessibilityLabel(editing ? "Finish editing presets" : "Edit presets")
         settingsButton.selected = settingsOpen
@@ -198,9 +199,9 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
         stateLabel.stringValue = text; stateLabel.textColor = color
         let measured = Int(model.actualPercent.rounded())
         let informative = model.sample != nil && !model.stale && abs(measured - shown) >= 3
-        actual.stringValue = !informative ? "" : model.ownsControl && model.pendingPercent == nil && !slider.isInteracting ? "Actual \(measured)% · settling" : "Fan now \(measured)%"
+        actual.stringValue = !informative ? "" : model.ownsControl && model.requestedPercent == nil && !slider.isInteracting ? "Actual \(measured)% · settling" : "Fan now \(measured)%"
         for (i, button) in presetButtons.enumerated() where model.presets.indices.contains(i) {
-            button.selected = (model.ownsControl || model.pendingPercent != nil || slider.isInteracting) && abs(value - effectivePercent(model.presets[i])) < 0.5
+            button.selected = (model.ownsControl || model.requestedPercent != nil || slider.isInteracting) && abs(value - effectivePercent(model.presets[i])) < 0.5
         }
     }
     private func statusLine() -> (String, NSColor) {
@@ -221,7 +222,6 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
     /// Single path for every user-requested speed (slider release, keys,
     /// presets, Manual). Before setup the model stores it as a preview.
     private func request(_ value: Double, animated: Bool) {
-        guard !model.busy else { return }
         let target = max(model.minimumPercent, min(100, value.rounded()))
         if !model.stale {
             hold = (target, Date().addingTimeInterval(3))
@@ -245,7 +245,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate {
             if button.title != preset.name { button.title = preset.name }
             button.detail = figure; button.toolTip = "\(preset.name) · \(figure)"
             button.setAccessibilityLabel("\(preset.name) preset, \(figure)")
-            button.isEnabled = !model.stale && !model.busy
+            button.isEnabled = !model.stale
         }
         showReadout(slider.percent)
     }

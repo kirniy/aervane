@@ -1,0 +1,15 @@
+models,fan,label,attrs
+"iMacPro1,1",fan0,Dual-fan cooler,{}
+"MacBookPro15,1;MacBookPro15,2;MacBookPro15,3;MacBookPro16,1;MacBookPro16,2;MacBookPro16,4;MacBookPro18,1+",fan0,Left side,{}
+"MacBookPro15,1;MacBookPro15,2;MacBookPro15,3;MacBookPro16,1;MacBookPro16,2;MacBookPro16,4;MacBookPro18,1+",fan1,Right side,{}
+"MacBookPro15,4;MacBookPro16,3;MacBookPro17,1;MacBookPro17,2",fan0,Right side,{}
+"MacBookPro20,1",fan0,Left side,{}
+"MacBookAir8,1;MacBookAir8,2;MacBookAir9,1;ADP3,2;Macmini8,1+",fan0,Exhaust,{}
+"MacPro7,1",fan0,Exhaust,{}
+"MacPro7,1",fan1,Intake 1,{}
+"MacPro7,1",fan2,Intake 2,{}
+"MacPro7,1",fan3,Intake 3,{}
+"iMac20,1;iMac20,2",fan0,Main,{}
+"iMac21,1+",fan0,Left side,{}
+"iMac21,1+",fan1,Right side,{}
+"MacStudio1,1+",fan0,Dual-fan exhaust,{}

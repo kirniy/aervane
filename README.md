@@ -12,7 +12,7 @@
 
 A native Mac menu-bar utility with CPU temperature at a glance, direct percentage-based fan control, and editable presets in one glass panel. Built with Swift, AppKit, and a small C bridge to AppleSMC. No embedded browser, runtime packages, telemetry, or background network requests.
 
-**Development preview.** Live temperature/fan reads, a development-signed local build, and keyboard/accessibility interactions have been verified on an M4 Mac mini. Thirty automated tests cover sensor decoding, ownership, recovery, and slider regressions. Privileged installation and physical fan writes await validation. There is no production release or working Homebrew cask yet.
+**Development preview.** The installed signed helper, real 100% and 60% fan changes, and return to Auto have been verified on an M4 Mac mini. 89 automated tests cover the control transaction, recovery, sensors, command queue and native controls. High temperature alone does not block manual control. Additional hardware and interaction validation remains; there is no production release or working Homebrew cask yet.
 
 <p align="center">
   <img src="docs/assets/menu-bar-preview.png" alt="Actual Aervane development preview: CPU temperature, percentage slider, and inline presets" width="380">
@@ -39,11 +39,11 @@ For a development-signed build, set `SIGN_IDENTITY` to an identity from `securit
 - Click the menu bar temperature to open or close the panel.
 - Drag the fan slider or choose a preset. Before helper setup, the panel labels this as a preview; no fan write occurs.
 - Fan speed means **percentage of the reported maximum speed**. Firmware limits apply: a Mac with a 21% minimum cannot be commanded to stop. The interface shows that limit explicitly.
-- The helper is designed to return to automatic control after lost heartbeats, critical temperature, sensor failure, disconnection, or the manual-session timeout. These paths require hardware validation before release.
+- The helper is designed to return to automatic control after lost heartbeats, sensor failure, disconnection, or the manual-session timeout. High temperature is informational; hardware speed limits still apply. Normal restoration is verified; fault scenarios need broader hardware validation.
 
 ### Development
 
-Start with [HANDOFF.md](HANDOFF.md) for current work, acceptance criteria, and validation gaps. [PRODUCT.md](PRODUCT.md) captures the brief; [DESIGN.md](DESIGN.md) records the native design system. See [hardware findings](docs/reverse-engineering.md), [verification](docs/verification.md), and [resource measurements](docs/performance.md).
+Start with [HANDOFF.md](HANDOFF.md) for current work, acceptance criteria, and validation gaps. [PRODUCT.md](PRODUCT.md) captures the brief; [DESIGN.md](DESIGN.md) records the native design system. See [hardware findings](docs/reverse-engineering.md), [model/key catalog](docs/compatibility/mfc-1.5.21/README.md), [verification](docs/verification.md), and [resource measurements](docs/performance.md).
 
 Homebrew packaging is staged in [`Casks/aervane.rb.in`](Casks/aervane.rb.in). A real checksum and release URL will be added after a distributable build is verified.
 

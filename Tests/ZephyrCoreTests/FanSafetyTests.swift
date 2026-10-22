@@ -4,7 +4,7 @@ import XCTest
 final class FanSafetyTests: XCTestCase {
     func testPercentValidation() throws { XCTAssertEqual(try FanSafety.validate(percent: 53.4), 53); XCTAssertThrowsError(try FanSafety.validate(percent: -1)); XCTAssertThrowsError(try FanSafety.validate(percent: .infinity)) }
     func testExpiredLeaseRestores() { let s = FanSnapshot(currentRPM: 2000, minimumRPM: 1000, maximumRPM: 4800, targetPercent: 40, automatic: false, temperatureCelsius: 60); XCTAssertTrue(FanSafety.shouldRestoreAutomatic(snapshot: s, lastHeartbeat: .now.addingTimeInterval(-16))) }
-    func testCriticalTemperatureRestores() { let s = FanSnapshot(currentRPM: 2000, minimumRPM: 1000, maximumRPM: 4800, targetPercent: 40, automatic: false, temperatureCelsius: 106); XCTAssertTrue(FanSafety.shouldRestoreAutomatic(snapshot: s, lastHeartbeat: .now)) }
+    func testValidHighTemperatureDoesNotRestoreWithLiveLease() { let s = FanSnapshot(currentRPM: 2000, minimumRPM: 1000, maximumRPM: 4800, targetPercent: 40, automatic: false, temperatureCelsius: 129); XCTAssertFalse(FanSafety.shouldRestoreAutomatic(snapshot: s, lastHeartbeat: .now)) }
     func testInvalidTemperatureFailsSafe() {
         XCTAssertThrowsError(try FanSafety.validateTemperature(.nan))
         XCTAssertThrowsError(try FanSafety.validateTemperature(131))

@@ -39,16 +39,7 @@ final class FanControlService: NSObject, FanControlXPCProtocol {
 
     static func xpcError(_ error: Error) -> NSError {
         if let error = error as? FanControlError {
-            let code: Int
-            switch error {
-            case .invalidPercent: code = 1
-            case .unavailable: code = 2
-            case .staleSensor: code = 3
-            case .hardwareFailure: code = 4
-            case .unauthorized: code = 5
-            case .tooHot: code = 6
-            }
-            return NSError(domain: "dev.kirniy.aervane.FanControl", code: code,
+            return NSError(domain: FanControlError.wireDomain, code: error.wireCode,
                            userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? "Fan control failed."])
         }
         let nsError = error as NSError
@@ -57,7 +48,11 @@ final class FanControlService: NSObject, FanControlXPCProtocol {
     }
 }
 
-private final class SMCRecoveryDriver: FanRecoveryDriver {
+protocol FanRawTargetReader {
+    func rawTargetPercent() throws -> Double
+}
+
+private final class SMCRecoveryDriver: FanRecoveryDriver, FanRawTargetReader {
     private let hardware = SMCFanDriver()
 
     func snapshot() throws -> FanSnapshot {
@@ -74,6 +69,7 @@ private final class SMCRecoveryDriver: FanRecoveryDriver {
                            maximumRPM: reading.maximumRPM, targetPercent: reading.targetPercent,
                            automatic: reading.automatic)
     }
+    func rawTargetPercent() throws -> Double { try hardware.rawTargetPercent() }
 
     func set(percent: Double) throws { try hardware.set(percent: percent) }
     func restoreAutomatic() throws { try hardware.automatic() }
@@ -129,7 +125,18 @@ final class FanControlController {
                 guard !self.journalPending else { throw FanControlError.unavailable }
                 var previousTarget: Double?
                 let snapshot = try self.policy.set(percent: percent, session: session) { before in
-                    previousTarget = self.policy.state.manual ? before.targetPercent : nil
+                    // In Auto, FanSnapshot intentionally omits F0Tg. Read the
+                    // raw firmware target before the mode-first transaction so
+                    // a restart between mode and target writes can still be
+                    // attributed to this lease.
+                    if before.automatic {
+                        guard let rawReader = self.policy.driver as? FanRawTargetReader else {
+                            throw FanControlError.unavailable
+                        }
+                        previousTarget = try rawReader.rawTargetPercent()
+                    } else {
+                        previousTarget = before.targetPercent
+                    }
                     try LeaseJournal(sessionID: session, previousTargetPercent: previousTarget,
                                      intendedPercent: try FanSafety.validate(percent: percent),
                                      phase: .beforeWrite, processID: getpid()).write(to: self.journalURL, requireRootOwner: self.requireRootJournal)
@@ -170,7 +177,7 @@ final class FanControlController {
     func heartbeat(session: UUID, reply: @escaping (Error?) -> Void) {
         queue.async { [weak self] in
             guard let self, self.policy.state.owns(session), self.policy.state.manual,
-                  !self.policy.state.restorePending else { reply(FanControlError.unavailable); return }
+                  !self.policy.state.restorePending else { reply(FanControlError.notOwner); return }
             self.policy.heartbeat(session)
             reply(nil)
         }

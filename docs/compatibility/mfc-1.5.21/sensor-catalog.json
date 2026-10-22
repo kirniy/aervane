@@ -1,0 +1,4867 @@
+{
+  "schema": "aervane.compatibility.mfc/v1",
+  "source": {
+    "application": "Macs Fan Control",
+    "version": "1.5.21",
+    "build": "82",
+    "binary_sha256": "65146b1964ae6f5a37f87c00ea9bd3b1d9a51265f72f022fbb0c3458487da8b3",
+    "resource_architectures": [
+      "x86_64",
+      "arm64"
+    ],
+    "scope": "All five embedded sensor/fan/model resources; independently verified identical in both architecture slices. Separate control-key analysis."
+  },
+  "resources": [
+    {
+      "name": "smcSensors-legacy",
+      "offsets": {
+        "x86_64": 2453374,
+        "arm64": 6194934
+      },
+      "compressed_bytes": 1723,
+      "expanded_bytes": 9901,
+      "sha256": "d01067ab9dfa74f0256a16c197f65a91ead94e961f6420dd218bad8ea5aaf642"
+    },
+    {
+      "name": "iokitSensors",
+      "offsets": {
+        "x86_64": 2455101,
+        "arm64": 6196661
+      },
+      "compressed_bytes": 551,
+      "expanded_bytes": 2689,
+      "sha256": "42e53da43fef70e217818cc5a6c380e938eef1a48213ad79ad5eef5f4b8cd9bf"
+    },
+    {
+      "name": "fanInfo",
+      "offsets": {
+        "x86_64": 2455656,
+        "arm64": 6197216
+      },
+      "compressed_bytes": 325,
+      "expanded_bytes": 1142,
+      "sha256": "f5af6b9e0b1e5034ec8bdc6a00db3f4652cb3ded690166ac2f501270f2e88ac4"
+    },
+    {
+      "name": "smcSensors-arm",
+      "offsets": {
+        "x86_64": 2456228,
+        "arm64": 6197779
+      },
+      "compressed_bytes": 1757,
+      "expanded_bytes": 17477,
+      "sha256": "b46187561e556b8e749fee230cc01956050de9ff352d30a7aac55c37b5986108"
+    },
+    {
+      "name": "idSwapRules",
+      "offsets": {
+        "x86_64": 2457989,
+        "arm64": 6199540
+      },
+      "compressed_bytes": 403,
+      "expanded_bytes": 2192,
+      "sha256": "8c7ab1f593e8f112485aa397b8656d5895b9ec07ea0b3e22965b49fef18c4fe5"
+    }
+  ],
+  "sensor_rules": [
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TA0P"
+      },
+      "members": [],
+      "key": "TA0P",
+      "label": "Ambient"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TA1P"
+      },
+      "members": [],
+      "key": "TA1P",
+      "label": "Ambient 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TB0T"
+      },
+      "members": [],
+      "key": "TB0T",
+      "label": "Battery Max"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TB1T"
+      },
+      "members": [],
+      "key": "TB1T",
+      "label": "Battery Sensor 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TB2T"
+      },
+      "members": [],
+      "key": "TB2T",
+      "label": "Battery Sensor 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TB3T"
+      },
+      "members": [],
+      "key": "TB3T",
+      "label": "Battery"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core (average)",
+        "key": "cpucoreavg",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "TC0c",
+          "label": "CPU Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC0c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC1c",
+          "label": "CPU Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC1c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC2c",
+          "label": "CPU Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC2c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC3c",
+          "label": "CPU Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC3c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC4c",
+          "label": "CPU Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC4c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC5c",
+          "label": "CPU Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC5c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC6c",
+          "label": "CPU Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC6c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC7c",
+          "label": "CPU Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC7c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC8c",
+          "label": "CPU Core 9",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC8c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC9c",
+          "label": "CPU Core 10",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC9c",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core (average)"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCXC",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCXC",
+      "label": "CPU PECI"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0H",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC0H",
+      "label": "CPU Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0D",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC0D",
+      "label": "CPU Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0P",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC0P",
+      "label": "CPU Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCGC",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TCGC",
+      "label": "GPU PECI"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0D",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG0D",
+      "label": "GPU Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TGDD",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TGDD",
+      "label": "GPU Diode 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0H",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG0H",
+      "label": "GPU Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0P",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG0P",
+      "label": "GPU Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG1P",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG1P",
+      "label": "GPU Proximity 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TO0P",
+        "type": "odd"
+      },
+      "members": [],
+      "key": "TO0P",
+      "label": "Optical Drive"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TL0p"
+      },
+      "members": [],
+      "key": "TL0p",
+      "label": "LCD Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TL1P"
+      },
+      "members": [],
+      "key": "TL1P",
+      "label": "LCD Proximity 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "Th1H"
+      },
+      "members": [],
+      "key": "Th1H",
+      "label": "Heatsink Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM0P"
+      },
+      "members": [],
+      "key": "TM0P",
+      "label": "Memory Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM0S"
+      },
+      "members": [],
+      "key": "TM0S",
+      "label": "Memory Slot"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0D"
+      },
+      "members": [],
+      "key": "TN0D",
+      "label": "MCP Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0H"
+      },
+      "members": [],
+      "key": "TN0H",
+      "label": "MCP Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0P"
+      },
+      "members": [],
+      "key": "TN0P",
+      "label": "Northbridge Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp0P",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Tp0P",
+      "label": "Power Supply Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp3H",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Tp3H",
+      "label": "PSU Primary"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp0C",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Tp0C",
+      "label": "PSMI Supply AC/DC Supply 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TI0P"
+      },
+      "members": [],
+      "key": "TI0P",
+      "label": "Thunderbolt Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "Ts0P"
+      },
+      "members": [],
+      "key": "Ts0P",
+      "label": "Trackpad"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TW0P",
+        "type": "airport"
+      },
+      "members": [],
+      "key": "TW0P",
+      "label": "Airport Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TPCD"
+      },
+      "members": [],
+      "key": "TPCD",
+      "label": "Platform Controller Hub Die"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "Macmini1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0P",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC0P",
+      "label": "CPU VR area"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "Macmini1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC1P",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC1P",
+      "label": "CPU Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "Macmini3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0P"
+      },
+      "members": [],
+      "key": "TN0P",
+      "label": "MCP Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "Macmini3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH0P"
+      },
+      "members": [],
+      "key": "TH0P",
+      "label": "HDD Case"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookAir2,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp1P",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Tp1P",
+      "label": "MLB Front Edge"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookAir2,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Ts0P",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Ts0P",
+      "label": "Temperature Skin Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookAir2,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TV0P",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "TV0P",
+      "label": "AIR Vent Exit"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBook5,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Th0H"
+      },
+      "members": [],
+      "key": "Th0H",
+      "label": "Heat Pipe Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro2,1;MacBookPro2,2;MacBookPro3,1;MacBookPro4,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0P"
+      },
+      "members": [],
+      "key": "Tm0P",
+      "label": "Clock Chip Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0D",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TN0D",
+      "label": "CPU Vcore"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1;MacBookPro5,2;MacBookPro5,3",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0P"
+      },
+      "members": [],
+      "key": "TN0P",
+      "label": "MCP Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1;MacBookPro5,2;MacBookPro5,3",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0P"
+      },
+      "members": [],
+      "key": "Tm0P",
+      "label": "Battery Charger"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1;MacBookPro5,2;MacBookPro5,3",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0H"
+      },
+      "members": [],
+      "key": "TG0H",
+      "label": "Left Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1;MacBookPro5,2;MacBookPro5,3",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG1H"
+      },
+      "members": [],
+      "key": "TG1H",
+      "label": "Left Heatsink Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1;MacBookPro5,2;MacBookPro5,3",
+      "kind": "smc",
+      "attrs": {
+        "name": "Th2H"
+      },
+      "members": [],
+      "key": "Th2H",
+      "label": "Right Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro6,1;MacBookPro6,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0P"
+      },
+      "members": [],
+      "key": "Tm0P",
+      "label": "Mainboard"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro5,1;MacBookPro5,2;MacBookPro5,3;MacBookPro6,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0H"
+      },
+      "members": [],
+      "key": "TG0H",
+      "label": "GPU Diode (Analog)"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "Macmini8,1;MacBook8,1+;MacBookAir6,1+;MacBookPro9,1;MacBookPro9,2;MacBookPro10,1;MacBookPro11,2;MacBookPro11,3;MacBookPro11,4;MacBookPro11,5;MacBookPro13,2+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0c",
+        "exclude": "1"
+      },
+      "members": [],
+      "key": "TC0c",
+      "label": ""
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "Macmini8,1;MacBook8,1+;MacBookAir6,1+;MacBookPro9,1;MacBookPro9,2;MacBookPro10,1;MacBookPro11,2;MacBookPro11,3;MacBookPro11,4;MacBookPro11,5;MacBookPro13,2+",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core (average)",
+        "key": "cpucoreavg",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "TC1C",
+          "label": "CPU Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC1C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC2C",
+          "label": "CPU Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC2C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC3C",
+          "label": "CPU Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC3C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC4C",
+          "label": "CPU Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC4C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC5C",
+          "label": "CPU Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC5C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC6C",
+          "label": "CPU Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC6C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC7C",
+          "label": "CPU Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC7C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "TC8C",
+          "label": "CPU Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "TC8C",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core (average)"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBookPro8,3",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC4c",
+        "exclude": "1"
+      },
+      "members": [],
+      "key": "TC4c",
+      "label": ""
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac13,2;iMac14,2;iMac15,1;iMac17,1;iMacPro1,1;MacPro1,1;MacPro2,1;MacPro3,1;MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM0p"
+      },
+      "members": [],
+      "key": "TM0p",
+      "label": "DIMM Module 1 Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac13,2;iMac14,2;iMac15,1;iMac17,1;iMacPro1,1;MacPro1,1;MacPro2,1;MacPro3,1;MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM1p"
+      },
+      "members": [],
+      "key": "TM1p",
+      "label": "DIMM Module 2 Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac13,2;iMac14,2;iMac15,1;iMac17,1;iMacPro1,1;MacPro1,1;MacPro2,1;MacPro3,1;MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM2p"
+      },
+      "members": [],
+      "key": "TM2p",
+      "label": "DIMM Module 3 Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac13,2;iMac14,2;iMac15,1;iMac17,1;iMacPro1,1;MacPro1,1;MacPro2,1;MacPro3,1;MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM3p"
+      },
+      "members": [],
+      "key": "TM3p",
+      "label": "DIMM Module 4 Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac9,1;iMac10,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0P"
+      },
+      "members": [],
+      "key": "TN0P",
+      "label": "MCP Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC0C",
+      "label": "CPU A Core 0"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC1C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC1C",
+      "label": "CPU A Core 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC2C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC2C",
+      "label": "CPU B Core 0"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC3C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC3C",
+      "label": "CPU B Core 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH0P"
+      },
+      "members": [],
+      "key": "TH0P",
+      "label": "Drive Bay 0"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH1P"
+      },
+      "members": [],
+      "key": "TH1P",
+      "label": "Drive Bay 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH2P"
+      },
+      "members": [],
+      "key": "TH2P",
+      "label": "Drive Bay 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH3P"
+      },
+      "members": [],
+      "key": "TH3P",
+      "label": "Drive Bay 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM1P"
+      },
+      "members": [],
+      "key": "TM1P",
+      "label": "FBDIMM Riser A Outgoing Air"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM2P"
+      },
+      "members": [],
+      "key": "TM2P",
+      "label": "FBDIMM Riser A Regulator Area"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM3P"
+      },
+      "members": [],
+      "key": "TM3P",
+      "label": "FBDIMM Ambient 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM8P"
+      },
+      "members": [],
+      "key": "TM8P",
+      "label": "FBDIMM Riser B Incoming Air"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM9P"
+      },
+      "members": [],
+      "key": "TM9P",
+      "label": "FBDIMM Riser B Outgoing Air"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM9P"
+      },
+      "members": [],
+      "key": "TM9P",
+      "label": "FBDIMM Riser B Regulator Area"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM0S"
+      },
+      "members": [],
+      "key": "TM0S",
+      "label": "FBDIMM Riser A Slot 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM1S"
+      },
+      "members": [],
+      "key": "TM1S",
+      "label": "FBDIMM Riser A Slot 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TS0C"
+      },
+      "members": [],
+      "key": "TS0C",
+      "label": "Expansion Slots"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCAC",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCAC",
+      "label": "CPU A core from PCECI"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCAH",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCAH",
+      "label": "CPU A HeatSink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCAD",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCAD",
+      "label": "CPU A Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCBC",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCBC",
+      "label": "CPU B core from PCECI"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCBH",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCBH",
+      "label": "CPU B HeatSink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TCBD",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TCBD",
+      "label": "CPU B Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH1P"
+      },
+      "members": [],
+      "key": "TH1P",
+      "label": "Drive Bay 0"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH2P"
+      },
+      "members": [],
+      "key": "TH2P",
+      "label": "Drive Bay 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH3P"
+      },
+      "members": [],
+      "key": "TH3P",
+      "label": "Drive Bay 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH4P"
+      },
+      "members": [],
+      "key": "TH4P",
+      "label": "Drive Bay 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM1P"
+      },
+      "members": [],
+      "key": "TM1P",
+      "label": "DIMM Proximity 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM2P"
+      },
+      "members": [],
+      "key": "TM2P",
+      "label": "DIMM Proximity 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM3P"
+      },
+      "members": [],
+      "key": "TM3P",
+      "label": "DIMM Proximity 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM4P"
+      },
+      "members": [],
+      "key": "TM4P",
+      "label": "DIMM Proximity 4"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM5P"
+      },
+      "members": [],
+      "key": "TM5P",
+      "label": "DIMM Proximity 5"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM6P"
+      },
+      "members": [],
+      "key": "TM6P",
+      "label": "DIMM Proximity 6"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM7P"
+      },
+      "members": [],
+      "key": "TM7P",
+      "label": "DIMM Proximity 7"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM8P"
+      },
+      "members": [],
+      "key": "TM8P",
+      "label": "DIMM Proximity 8"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te1P"
+      },
+      "members": [],
+      "key": "Te1P",
+      "label": "PCIE Ambient"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te1S"
+      },
+      "members": [],
+      "key": "Te1S",
+      "label": "PCIE slot 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te2S"
+      },
+      "members": [],
+      "key": "Te2S",
+      "label": "PCIE slot 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te3S"
+      },
+      "members": [],
+      "key": "Te3S",
+      "label": "PCIE slot 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te4S"
+      },
+      "members": [],
+      "key": "Te4S",
+      "label": "PCIE slot 4"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te5S"
+      },
+      "members": [],
+      "key": "Te5S",
+      "label": "PCIe RAID card"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0D"
+      },
+      "members": [],
+      "key": "TN0D",
+      "label": "Northbridge Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0H"
+      },
+      "members": [],
+      "key": "TN0H",
+      "label": "Northbridge Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro1,1;MacPro2,1;MacPro3,1;MacPro4,1;MacPro5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp1C",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Tp1C",
+      "label": "PSMI Supply AC/DC Supply 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TA0p"
+      },
+      "members": [],
+      "key": "TA0p",
+      "label": "Ambient MLB"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TA2p"
+      },
+      "members": [],
+      "key": "TA2p",
+      "label": "Ambient 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0p",
+        "type": "cpu",
+        "exclude": "1"
+      },
+      "members": [],
+      "key": "TC0p",
+      "label": "CPU Local Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC1p",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC1p",
+      "label": "CPU VCore Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Te0t"
+      },
+      "members": [],
+      "key": "Te0t",
+      "label": "PCIe Switch Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0D",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG0D",
+      "label": "GPU 1 Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG1D",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG1D",
+      "label": "GPU 2 Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM0p"
+      },
+      "members": [],
+      "key": "TM0p",
+      "label": "DIMM 1,2 Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TM1p"
+      },
+      "members": [],
+      "key": "TM1p",
+      "label": "DIMM 3,4 Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0p",
+        "exclude": "1"
+      },
+      "members": [],
+      "key": "Tm0p",
+      "label": "MLB Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp0T",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Tp0T",
+      "label": "PSU Secondary Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TI0P"
+      },
+      "members": [],
+      "key": "TI0P",
+      "label": "I/O Board Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC0C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC0C",
+      "label": "CPU Sensor 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC1C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC1C",
+      "label": "CPU Sensor 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC2C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC2C",
+      "label": "CPU Sensor 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TC3C",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "TC3C",
+      "label": "CPU Sensor 4"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0p",
+        "type": "gpu",
+        "exclude": "1"
+      },
+      "members": [],
+      "key": "TG0p",
+      "label": "GPU 1 Local"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacPro6,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG1p",
+        "type": "gpu",
+        "exclude": "1"
+      },
+      "members": [],
+      "key": "TG1p",
+      "label": "GPU 2 Local"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac4,1;iMac5,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0P"
+      },
+      "members": [],
+      "key": "Tm0P",
+      "label": "Clock Chip Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac9,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0D"
+      },
+      "members": [],
+      "key": "TN0D",
+      "label": "Northbridge Diode"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac9,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TN0H"
+      },
+      "members": [],
+      "key": "TN0H",
+      "label": "Northbridge Heatsink"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac9,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0P"
+      },
+      "members": [],
+      "key": "Tm0P",
+      "label": "MLB Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac4,1;iMac5,1;iMac6,1;iMac7,1;iMac8,1;iMac9,1;MacMini3,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH0P"
+      },
+      "members": [],
+      "key": "TH0P",
+      "label": "HDD Proximity"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac15,1;iMac17,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG0p",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG0p",
+      "label": "GPU Proximity 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac15,1;iMac17,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG1p",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG1p",
+      "label": "GPU Proximity 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac15,1;iMac17,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG2p",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG2p",
+      "label": "GPU Proximity 3"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac15,1;iMac17,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG3p",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG3p",
+      "label": "GPU Proximity 4"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac13,1;iMac13,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH1B",
+        "type": "ssd"
+      },
+      "members": [],
+      "key": "TH1B",
+      "label": "Apple SSD"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMac15,1;iMac17,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH1A",
+        "type": "ssd"
+      },
+      "members": [],
+      "key": "TH1A",
+      "label": "Apple SSD"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "MacBook8,1+;MacBookAir6,2+;MacBookPro10,1;MacBookPro11,1;MacBookPro11,3;MacBookPro11,4;MacBookPro12,1;MacBookPro13,1;MacBookPro13,2;MacBookPro13,3;MacBookPro14,1;MacBookPro14,2;MacBookPro14,3;MacBookPro15,1;MacBookPro15,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH0A",
+        "type": "ssd"
+      },
+      "members": [],
+      "key": "TH0A",
+      "label": "Apple SSD"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMacPro1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH0A",
+        "type": "ssd"
+      },
+      "members": [],
+      "key": "TH0A",
+      "label": "SSD A"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMacPro1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TH1A",
+        "type": "ssd"
+      },
+      "members": [],
+      "key": "TH1A",
+      "label": "SSD B"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMacPro1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG1P",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG1P",
+      "label": "GPU Proximity 1"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMacPro1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG2P",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG2P",
+      "label": "GPU Proximity 2"
+    },
+    {
+      "resource": "smcSensors-legacy",
+      "models": "iMacPro1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TG3P",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "TG3P",
+      "label": "GPU Proximity 3"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Proximity"
+      },
+      "members": [
+        {
+          "key": "GPU MTR Temp Sensor1",
+          "label": "GPU Sensor 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "GPU MTR Temp Sensor1",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "GPU MTR Temp Sensor4",
+          "label": "GPU Sensor 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "GPU MTR Temp Sensor4",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Proximity"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "gas gauge battery"
+      },
+      "members": [],
+      "key": "gas gauge battery",
+      "label": "Battery Gas Gauge"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "NAND CH0 temp",
+        "type": "ssd"
+      },
+      "members": [],
+      "key": "NAND CH0 temp",
+      "label": "SSD"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "SOC MTR Temp Sensor0"
+      },
+      "members": [],
+      "key": "SOC MTR Temp Sensor0",
+      "label": "M1 SOC Sensor 1"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "SOC MTR Temp Sensor1"
+      },
+      "members": [],
+      "key": "SOC MTR Temp Sensor1",
+      "label": "M1 SOC Sensor 2"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "SOC MTR Temp Sensor2"
+      },
+      "members": [],
+      "key": "SOC MTR Temp Sensor2",
+      "label": "M1 SOC Sensor 3"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Efficiency Cores Average"
+      },
+      "members": [
+        {
+          "key": "eACC MTR Temp Sensor0",
+          "label": "CPU Efficiency Cores Package 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "eACC MTR Temp Sensor0",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "eACC MTR Temp Sensor3",
+          "label": "CPU Efficiency Cores Package 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "eACC MTR Temp Sensor3",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Efficiency Cores Average"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Performance Cores Average"
+      },
+      "members": [
+        {
+          "key": "pACC MTR Temp Sensor2",
+          "label": "CPU Performance Cores Package 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor2",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "pACC MTR Temp Sensor3",
+          "label": "CPU Performance Cores Package 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor3",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "pACC MTR Temp Sensor4",
+          "label": "CPU Performance Cores Package 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor4",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "pACC MTR Temp Sensor5",
+          "label": "CPU Performance Cores Package 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor5",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "pACC MTR Temp Sensor7",
+          "label": "CPU Performance Cores Package 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor7",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "pACC MTR Temp Sensor8",
+          "label": "CPU Performance Cores Package 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor8",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "pACC MTR Temp Sensor9",
+          "label": "CPU Performance Cores Package 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "pACC MTR Temp Sensor9",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Performance Cores Average"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "ANE MTR Temp Sensor1"
+      },
+      "members": [],
+      "key": "ANE MTR Temp Sensor1",
+      "label": "M1 Neural Engine"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "ISP MTR Temp Sensor5"
+      },
+      "members": [],
+      "key": "ISP MTR Temp Sensor5",
+      "label": "M1 Image Signal Processor"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "group",
+      "attrs": {
+        "name": "Power Manager SOC Die Average"
+      },
+      "members": [
+        {
+          "key": "PMGR SOC Die Temp Sensor0",
+          "label": "Power Manager SOC Die 1",
+          "type": "psu",
+          "attrs": {
+            "name": "PMGR SOC Die Temp Sensor0",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMGR SOC Die Temp Sensor1",
+          "label": "Power Manager SOC Die 2",
+          "type": "psu",
+          "attrs": {
+            "name": "PMGR SOC Die Temp Sensor1",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMGR SOC Die Temp Sensor2",
+          "label": "Power Manager SOC Die 3",
+          "type": "psu",
+          "attrs": {
+            "name": "PMGR SOC Die Temp Sensor2",
+            "type": "psu"
+          }
+        }
+      ],
+      "name": "Power Manager SOC Die Average"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "group",
+      "attrs": {
+        "name": "Power Manager Die Average"
+      },
+      "members": [
+        {
+          "key": "PMU tdie1",
+          "label": "Power Manager Die 1",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie1",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMU tdie2",
+          "label": "Power Manager Die 2",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie2",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMU tdie4",
+          "label": "Power Manager Die 4",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie4",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMU tdie5",
+          "label": "Power Manager Die 5",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie5",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMU tdie6",
+          "label": "Power Manager Die 6",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie6",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMU tdie7",
+          "label": "Power Manager Die 7",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie7",
+            "type": "psu"
+          }
+        },
+        {
+          "key": "PMU tdie8",
+          "label": "Power Manager Die 8",
+          "type": "psu",
+          "attrs": {
+            "name": "PMU tdie8",
+            "type": "psu"
+          }
+        }
+      ],
+      "name": "Power Manager Die Average"
+    },
+    {
+      "resource": "iokitSensors",
+      "models": "all",
+      "kind": "iokit",
+      "attrs": {
+        "name": "Charger TQ0d",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "Charger TQ0d",
+      "label": "Charger Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TA0P"
+      },
+      "members": [],
+      "key": "TA0P",
+      "label": "Ambient"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TB0T"
+      },
+      "members": [],
+      "key": "TB0T",
+      "label": "Battery"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "Th1H"
+      },
+      "members": [],
+      "key": "Th1H",
+      "label": "Heatsink Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TPMP",
+        "type": "psu"
+      },
+      "members": [],
+      "key": "TPMP",
+      "label": "Power Supply Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "all",
+      "kind": "smc",
+      "attrs": {
+        "name": "TW0P",
+        "type": "airport"
+      },
+      "members": [],
+      "key": "TW0P",
+      "label": "Airport Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro17,1+;MacBookAir10,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "Ts0P"
+      },
+      "members": [],
+      "key": "Ts0P",
+      "label": "Trackpad"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro17,1+;MacBookAir10,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "Ts1P"
+      },
+      "members": [],
+      "key": "Ts1P",
+      "label": "Trackpad Actuator"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "iMac21,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TL0p"
+      },
+      "members": [],
+      "key": "TL0p",
+      "label": "LCD Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "iMac21,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TL1P"
+      },
+      "members": [],
+      "key": "TL1P",
+      "label": "LCD Proximity 2"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "Macmini9,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TIOP"
+      },
+      "members": [],
+      "key": "TIOP",
+      "label": "Thunderbolt Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro18,1;MacBookPro18,2;MacBookPro18,3;MacBookPro18,4;MacStudio1,1;MacStudio1,2",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg05",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg05",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0D",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0D",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0L",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0L",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0T",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0T",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0b",
+          "label": "GPU Cluster 5",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0b",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0j",
+          "label": "GPU Cluster 6",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0j",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0r",
+          "label": "GPU Cluster 7",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0r",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0z",
+          "label": "GPU Cluster 8",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0z",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro18,1;MacBookPro18,2;MacBookPro18,3;MacBookPro18,4;MacStudio1,1;MacStudio1,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp05",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0H",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0H",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0L",
+          "label": "CPU Performance Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0L",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0P",
+          "label": "CPU Performance Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0P",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0X",
+          "label": "CPU Performance Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0b",
+          "label": "CPU Performance Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0b",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0T",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0T",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp21",
+          "label": "CPU Performance Core 9",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp21",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp25",
+          "label": "CPU Performance Core 10",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp25",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2D",
+          "label": "CPU Performance Core 11",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2H",
+          "label": "CPU Performance Core 12",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2H",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2L",
+          "label": "CPU Performance Core 13",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2L",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2P",
+          "label": "CPU Performance Core 14",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2P",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2X",
+          "label": "CPU Performance Core 15",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2b",
+          "label": "CPU Performance Core 16",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2b",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp29",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp29",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp2T",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp2T",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro18,1;MacBookPro18,2;MacBookPro18,3;MacBookPro18,4;MacStudio1,1;MacStudio1,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm00"
+      },
+      "members": [],
+      "key": "Tm00",
+      "label": "Memory Bank 1"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro18,1;MacBookPro18,2;MacBookPro18,3;MacBookPro18,4;MacStudio1,1;MacStudio1,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm04"
+      },
+      "members": [],
+      "key": "Tm04",
+      "label": "Memory Bank 2"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro18,1;MacBookPro18,2;MacBookPro18,3;MacBookPro18,4;MacStudio1,1;MacStudio1,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm08"
+      },
+      "members": [],
+      "key": "Tm08",
+      "label": "Memory Bank 3"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro18,1;MacBookPro18,2;MacBookPro18,3;MacBookPro18,4;MacStudio1,1;MacStudio1,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm0C"
+      },
+      "members": [],
+      "key": "Tm0C",
+      "label": "Memory Bank 4"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio1,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaFL"
+      },
+      "members": [],
+      "key": "TaFL",
+      "label": "Airflow Front Left"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio1,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaFR"
+      },
+      "members": [],
+      "key": "TaFR",
+      "label": "Airflow Front Right"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio1,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaRL"
+      },
+      "members": [],
+      "key": "TaRL",
+      "label": "Airflow Rear Left"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio1,1+",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaRR"
+      },
+      "members": [],
+      "key": "TaRR",
+      "label": "Airflow Rear Right"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio2,1;MacStudio2,2",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg0f",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0f",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0j",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0j",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg1h",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg1h",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg1l",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg1l",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg2f",
+          "label": "GPU Cluster 5",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg2f",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio2,1;MacStudio2,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0X",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0f",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0f",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1B",
+          "label": "CPU Performance Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1B",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1J",
+          "label": "CPU Performance Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1J",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1h",
+          "label": "CPU Performance Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1h",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1p",
+          "label": "CPU Performance Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1p",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0b",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0b",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0j",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0j",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro17,2;MacBookAir11,1;MacBookAir11,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tg0f",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "Tg0f",
+      "label": "GPU Cluster 1"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro17,2;MacBookAir11,1;MacBookAir11,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tg0n",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "Tg0n",
+      "label": "GPU Cluster 2"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro17,2;MacBookAir11,1;MacBookAir11,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0f",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0f",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0n",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0n",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0j",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0j",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0r",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0r",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro19,1;MacBookPro19,2;MacBookPro19,3;MacBookPro19,4;Macmini10,1;Macmini10,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tg0f",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "Tg0f",
+      "label": "GPU Cluster 1"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro19,1;MacBookPro19,2;MacBookPro19,3;MacBookPro19,4;Macmini10,1;Macmini10,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tg1l",
+        "type": "gpu"
+      },
+      "members": [],
+      "key": "Tg1l",
+      "label": "GPU Cluster 2"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro19,1;MacBookPro19,2;MacBookPro19,3;MacBookPro19,4;Macmini10,1;Macmini10,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaLP"
+      },
+      "members": [],
+      "key": "TaLP",
+      "label": "Airflow Left"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro19,1;MacBookPro19,2;MacBookPro19,3;MacBookPro19,4;Macmini10,1;Macmini10,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaRF"
+      },
+      "members": [],
+      "key": "TaRF",
+      "label": "Airflow Right"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro19,1;MacBookPro19,2;MacBookPro19,3;MacBookPro19,4;Macmini10,1;Macmini10,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0X",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0f",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0f",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1B",
+          "label": "CPU Performance Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1B",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1J",
+          "label": "CPU Performance Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1J",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1h",
+          "label": "CPU Performance Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1h",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1p",
+          "label": "CPU Performance Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1p",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0b",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0b",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0j",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0j",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "Macmini10,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tp0n",
+        "type": "cpu"
+      },
+      "members": [],
+      "key": "Tp0n",
+      "label": "CPU Performance Core 3"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro20,1;iMac22,1;iMac22,2;MacBookAir12,1;MacBookAir12,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0X",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0f",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0f",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0b",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0b",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0j",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0j",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro20,1;iMac22,1;iMac22,2;MacBookAir12,1;MacBookAir12,2",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Core Average",
+        "hideSensors": "1"
+      },
+      "members": [
+        {
+          "key": "Tg0D",
+          "label": "GPU Cores",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0D",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0P",
+          "label": "GPU Cores",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0P",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0X",
+          "label": "GPU Cores",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0X",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0b",
+          "label": "GPU Cores",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0b",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0j",
+          "label": "GPU Cores",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0j",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0v",
+          "label": "GPU Cores",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0v",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro20,2;MacBookPro20,5",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp05",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0L",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0L",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0S",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0S",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp17",
+          "label": "CPU Performance Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp17",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1F",
+          "label": "CPU Performance Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1F",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0P",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0P",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0H",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0H",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te04",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te04",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0S",
+          "label": "CPU Efficiency Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0S",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0U",
+          "label": "CPU Efficiency Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0U",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro20,2;MacBookPro20,5",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Clusters Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg05",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg05",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0D",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0D",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0v",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0v",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg1B",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg1B",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Clusters Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro20,3;MacBookPro20,4;MacBookPro20,6;MacBookPro20,7",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp05",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0L",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0L",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1F",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1F",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp17",
+          "label": "CPU Performance Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp17",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0S",
+          "label": "CPU Performance Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0S",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1h",
+          "label": "CPU Performance Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1h",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1p",
+          "label": "CPU Performance Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1p",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1y",
+          "label": "CPU Performance Core 9",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1y",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp30",
+          "label": "CPU Performance Core 10",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp30",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp26",
+          "label": "CPU Performance Core 11",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp26",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp3s",
+          "label": "CPU Performance Core 12",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp3s",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te05",
+          "label": "CPU Efficiency Core 1;CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0L",
+          "label": "CPU Efficiency Core 3;CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0L",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro20,3;MacBookPro20,4;MacBookPro20,6;MacBookPro20,7",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Clusters Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg05",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg05",
+            "type": "gpu",
+            "add_no_fail": "1"
+          }
+        },
+        {
+          "key": "Tg0z",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0z",
+            "type": "gpu",
+            "add_no_fail": "1"
+          }
+        },
+        {
+          "key": "Tg34",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg34",
+            "type": "gpu",
+            "add_no_fail": "1"
+          }
+        },
+        {
+          "key": "Tg3y",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg3y",
+            "type": "gpu",
+            "add_no_fail": "1"
+          }
+        }
+      ],
+      "name": "GPU Clusters Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "Macmini11,1;MacBookPro21,1;iMac23,1;iMac23,2;MacBookAir13,1;MacBookAir13,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp05",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0D",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te09",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0H",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0H",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0S",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0S",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0U",
+          "label": "CPU Efficiency Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0U",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0V",
+          "label": "CPU Efficiency Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0V",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "Macmini11,1;MacBookPro21,1;iMac23,1;iMac23,2;MacBookAir13,1;MacBookAir13,2",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg04",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg04",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg12",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg12",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "Macmini11,1;MacBookPro21,1;iMac23,1;iMac23,2;MacBookAir13,1;MacBookAir13,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "Tm1p"
+      },
+      "members": [],
+      "key": "Tm1p",
+      "label": "Memory Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,1;Macmini11,2;MacBookPro21,2;MacBookPro21,3;MacBookPro21,4;MacBookPro21,5",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1;CPU Performance Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 2;CPU Performance Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0H",
+          "label": "CPU Performance Core 3;CPU Performance Core 9",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0H",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0P",
+          "label": "CPU Performance Core 4;CPU Performance Core 10",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0P",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0X",
+          "label": "CPU Performance Core 5;CPU Performance Core 11",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0Y",
+          "label": "CPU Performance Core 6;CPU Performance Core 12",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0Y",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te05",
+          "label": "CPU Efficiency Core 1;CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0S",
+          "label": "CPU Efficiency Core 3;CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0S",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,1;Macmini11,2;MacBookPro21,2;MacBookPro21,3;MacBookPro21,4;MacBookPro21,5",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg05",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg05",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0S",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0S",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0Y",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0Y",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0k",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0k",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0z",
+          "label": "GPU Cluster 5",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0z",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,1;Macmini11,2;MacBookPro21,2;MacBookPro21,3;MacBookPro21,4;MacBookPro21,5",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaLT"
+      },
+      "members": [],
+      "key": "TaLT",
+      "label": "Thunderbolt Left Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,1;Macmini11,2;MacBookPro21,2;MacBookPro21,3;MacBookPro21,4;MacBookPro21,5",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaRT"
+      },
+      "members": [],
+      "key": "TaRT",
+      "label": "Thunderbolt Right Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro22,1;MacBookAir14,1;MacBookAir14,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp00",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp00",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0C",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0C",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0O",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0O",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0X",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0X",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te04",
+          "label": "CPU Efficiency Core 1;CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te04",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te08",
+          "label": "CPU Efficiency Core 2;CPU Efficiency Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te08",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0C",
+          "label": "CPU Efficiency Core 3;CPU Efficiency Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0C",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro22,1;MacBookAir14,1;MacBookAir14,2",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg04",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg04",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg12",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg12",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro22,2+",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tm04",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm04",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm0G",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm0G",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm0R",
+          "label": "CPU Performance Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm0R",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm0a",
+          "label": "CPU Performance Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm0a",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm0j",
+          "label": "CPU Performance Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm0j",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm1Q",
+          "label": "CPU Performance Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm1Q",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm1c",
+          "label": "CPU Performance Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm1c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm1o",
+          "label": "CPU Performance Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm1o",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm21",
+          "label": "CPU Performance Core 9",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm21",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm2D",
+          "label": "CPU Performance Core 10",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm2D",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm2P",
+          "label": "CPU Performance Core 11",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm2P",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tm2n",
+          "label": "CPU Performance Core 12",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tm2n",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp04",
+          "label": "CPU Super Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp04",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0G",
+          "label": "CPU Super Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0G",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0R",
+          "label": "CPU Super Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0R",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0a",
+          "label": "CPU Super Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0a",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0j",
+          "label": "CPU Super Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0j",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0u",
+          "label": "CPU Super Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0u",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1I",
+          "label": "CPU Super Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1I",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1g",
+          "label": "CPU Super Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1g",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookPro22,2+",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg08",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg08",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg12",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg12",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg1x",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg1x",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg29",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg29",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,2",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp06",
+          "label": "CPU Performance Core 1;CPU Performance Core 9",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp06",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0E",
+          "label": "CPU Performance Core 2;CPU Performance Core 10",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0E",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0M",
+          "label": "CPU Performance Core 3;CPU Performance Core 11",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0M",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0T",
+          "label": "CPU Performance Core 4;CPU Performance Core 12",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0T",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0W",
+          "label": "CPU Performance Core 5;CPU Performance Core 13",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0W",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0c",
+          "label": "CPU Performance Core 6;CPU Performance Core 14",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0c",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0i",
+          "label": "CPU Performance Core 7;CPU Performance Core 15",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0i",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp0o",
+          "label": "CPU Performance Core 8;CPU Performance Core 16",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp0o",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp18",
+          "label": "CPU Performance Core 17;CPU Performance Core 21",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp18",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1G",
+          "label": "CPU Performance Core 18;CPU Performance Core 22",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1G",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1K",
+          "label": "CPU Performance Core 19;CPU Performance Core 23",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1K",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp1S",
+          "label": "CPU Performance Core 20;CPU Performance Core 24",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp1S",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te06",
+          "label": "CPU Efficiency Core 1;CPU Efficiency Core 5",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te06",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0M",
+          "label": "CPU Efficiency Core 2;CPU Efficiency Core 6",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0M",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0Q",
+          "label": "CPU Efficiency Core 3;CPU Efficiency Core 7",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0Q",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te0T",
+          "label": "CPU Efficiency Core 4;CPU Efficiency Core 8",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te0T",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,2",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg05",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg05",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0z",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0z",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg22",
+          "label": "GPU Cluster 3",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg22",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg2I",
+          "label": "GPU Cluster 4",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg2I",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg34",
+          "label": "GPU Cluster 5",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg34",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg3K",
+          "label": "GPU Cluster 6",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg3K",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaLT"
+      },
+      "members": [],
+      "key": "TaLT",
+      "label": "Thunderbolt Left Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacStudio3,2",
+      "kind": "smc",
+      "attrs": {
+        "name": "TaRT"
+      },
+      "members": [],
+      "key": "TaRT",
+      "label": "Thunderbolt Right Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookNeo1,1",
+      "kind": "smc",
+      "attrs": {
+        "name": "TW0p",
+        "type": "airport"
+      },
+      "members": [],
+      "key": "TW0p",
+      "label": "Airport Proximity"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookNeo1,1",
+      "kind": "group",
+      "attrs": {
+        "name": "CPU Core Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tp01",
+          "label": "CPU Performance Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp01",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tp09",
+          "label": "CPU Performance Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tp09",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te05",
+          "label": "CPU Efficiency Core 1",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te05",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Te06",
+          "label": "CPU Efficiency Core 2",
+          "type": "cpu",
+          "attrs": {
+            "name": "Te06",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tex0",
+          "label": "CPU Efficiency Core 3",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tex0",
+            "type": "cpu"
+          }
+        },
+        {
+          "key": "Tex1",
+          "label": "CPU Efficiency Core 4",
+          "type": "cpu",
+          "attrs": {
+            "name": "Tex1",
+            "type": "cpu"
+          }
+        }
+      ],
+      "name": "CPU Core Average"
+    },
+    {
+      "resource": "smcSensors-arm",
+      "models": "MacBookNeo1,1",
+      "kind": "group",
+      "attrs": {
+        "name": "GPU Cluster Average",
+        "hideSensors": "0"
+      },
+      "members": [
+        {
+          "key": "Tg05",
+          "label": "GPU Cluster 1",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg05",
+            "type": "gpu"
+          }
+        },
+        {
+          "key": "Tg0D",
+          "label": "GPU Cluster 2",
+          "type": "gpu",
+          "attrs": {
+            "name": "Tg0D",
+            "type": "gpu"
+          }
+        }
+      ],
+      "name": "GPU Cluster Average"
+    }
+  ],
+  "fan_rules": [
+    {
+      "models": "iMacPro1,1",
+      "fan": "fan0",
+      "label": "Dual-fan cooler",
+      "attrs": {}
+    },
+    {
+      "models": "MacBookPro15,1;MacBookPro15,2;MacBookPro15,3;MacBookPro16,1;MacBookPro16,2;MacBookPro16,4;MacBookPro18,1+",
+      "fan": "fan0",
+      "label": "Left side",
+      "attrs": {}
+    },
+    {
+      "models": "MacBookPro15,1;MacBookPro15,2;MacBookPro15,3;MacBookPro16,1;MacBookPro16,2;MacBookPro16,4;MacBookPro18,1+",
+      "fan": "fan1",
+      "label": "Right side",
+      "attrs": {}
+    },
+    {
+      "models": "MacBookPro15,4;MacBookPro16,3;MacBookPro17,1;MacBookPro17,2",
+      "fan": "fan0",
+      "label": "Right side",
+      "attrs": {}
+    },
+    {
+      "models": "MacBookPro20,1",
+      "fan": "fan0",
+      "label": "Left side",
+      "attrs": {}
+    },
+    {
+      "models": "MacBookAir8,1;MacBookAir8,2;MacBookAir9,1;ADP3,2;Macmini8,1+",
+      "fan": "fan0",
+      "label": "Exhaust",
+      "attrs": {}
+    },
+    {
+      "models": "MacPro7,1",
+      "fan": "fan0",
+      "label": "Exhaust",
+      "attrs": {}
+    },
+    {
+      "models": "MacPro7,1",
+      "fan": "fan1",
+      "label": "Intake 1",
+      "attrs": {}
+    },
+    {
+      "models": "MacPro7,1",
+      "fan": "fan2",
+      "label": "Intake 2",
+      "attrs": {}
+    },
+    {
+      "models": "MacPro7,1",
+      "fan": "fan3",
+      "label": "Intake 3",
+      "attrs": {}
+    },
+    {
+      "models": "iMac20,1;iMac20,2",
+      "fan": "fan0",
+      "label": "Main",
+      "attrs": {}
+    },
+    {
+      "models": "iMac21,1+",
+      "fan": "fan0",
+      "label": "Left side",
+      "attrs": {}
+    },
+    {
+      "models": "iMac21,1+",
+      "fan": "fan1",
+      "label": "Right side",
+      "attrs": {}
+    },
+    {
+      "models": "MacStudio1,1+",
+      "fan": "fan0",
+      "label": "Dual-fan exhaust",
+      "attrs": {}
+    }
+  ],
+  "id_swaps": [
+    {
+      "from": "Mac13,1",
+      "to": "MacStudio1,1"
+    },
+    {
+      "from": "Mac13,2",
+      "to": "MacStudio1,2"
+    },
+    {
+      "from": "Mac14,3",
+      "to": "Macmini10,1"
+    },
+    {
+      "from": "Mac14,12",
+      "to": "Macmini10,2"
+    },
+    {
+      "from": "Mac14,7",
+      "to": "MacBookPro17,2"
+    },
+    {
+      "from": "Mac14,5",
+      "to": "MacBookPro19,3"
+    },
+    {
+      "from": "Mac14,6",
+      "to": "MacBookPro19,4"
+    },
+    {
+      "from": "Mac14,9",
+      "to": "MacBookPro19,1"
+    },
+    {
+      "from": "Mac14,10",
+      "to": "MacBookPro19,2"
+    },
+    {
+      "from": "Mac14,8",
+      "to": "MacPro8,1"
+    },
+    {
+      "from": "Mac14,13",
+      "to": "MacStudio2,1"
+    },
+    {
+      "from": "Mac14,14",
+      "to": "MacStudio2,2"
+    },
+    {
+      "from": "Mac14,2",
+      "to": "MacBookAir11,1"
+    },
+    {
+      "from": "Mac14,15",
+      "to": "MacBookAir11,2"
+    },
+    {
+      "from": "Mac15,3",
+      "to": "MacBookPro20,1"
+    },
+    {
+      "from": "Mac15,6",
+      "to": "MacBookPro20,2"
+    },
+    {
+      "from": "Mac15,8",
+      "to": "MacBookPro20,3"
+    },
+    {
+      "from": "Mac15,10",
+      "to": "MacBookPro20,4"
+    },
+    {
+      "from": "Mac15,7",
+      "to": "MacBookPro20,5"
+    },
+    {
+      "from": "Mac15,11",
+      "to": "MacBookPro20,6"
+    },
+    {
+      "from": "Mac15,9",
+      "to": "MacBookPro20,7"
+    },
+    {
+      "from": "Mac15,4",
+      "to": "iMac22,1"
+    },
+    {
+      "from": "Mac15,5",
+      "to": "iMac22,2"
+    },
+    {
+      "from": "Mac15,2",
+      "to": "MacBookAir12,1"
+    },
+    {
+      "from": "Mac15,13",
+      "to": "MacBookAir12,2"
+    },
+    {
+      "from": "Mac15,14",
+      "to": "MacStudio3,2"
+    },
+    {
+      "from": "Mac16,10",
+      "to": "Macmini11,1"
+    },
+    {
+      "from": "Mac16,11",
+      "to": "Macmini11,2"
+    },
+    {
+      "from": "Mac16,12",
+      "to": "MacBookAir13,1"
+    },
+    {
+      "from": "Mac16,13",
+      "to": "MacBookAir13,2"
+    },
+    {
+      "from": "Mac16,3",
+      "to": "iMac23,1"
+    },
+    {
+      "from": "Mac16,2",
+      "to": "iMac23,2"
+    },
+    {
+      "from": "Mac16,1",
+      "to": "MacBookPro21,1"
+    },
+    {
+      "from": "Mac16,8",
+      "to": "MacBookPro21,2"
+    },
+    {
+      "from": "Mac16,6",
+      "to": "MacBookPro21,3"
+    },
+    {
+      "from": "Mac16,7",
+      "to": "MacBookPro21,4"
+    },
+    {
+      "from": "Mac16,5",
+      "to": "MacBookPro21,5"
+    },
+    {
+      "from": "Mac16,9",
+      "to": "MacStudio3,1"
+    },
+    {
+      "from": "Mac17,2",
+      "to": "MacBookPro22,1"
+    },
+    {
+      "from": "Mac17,9",
+      "to": "MacBookPro22,2"
+    },
+    {
+      "from": "Mac17,7",
+      "to": "MacBookPro22,3"
+    },
+    {
+      "from": "Mac17,8",
+      "to": "MacBookPro22,4"
+    },
+    {
+      "from": "Mac17,6",
+      "to": "MacBookPro22,5"
+    },
+    {
+      "from": "Mac17,3",
+      "to": "MacBookAir14,1"
+    },
+    {
+      "from": "Mac17,4",
+      "to": "MacBookAir14,2"
+    },
+    {
+      "from": "Mac17,5",
+      "to": "MacBookNeo1,1"
+    }
+  ],
+  "counts": {
+    "sensor_rules": 205,
+    "sensor_rows": 414,
+    "smc_rows": 385,
+    "unique_smc_sensor_keys": 237,
+    "iokit_rows": 29,
+    "fan_rules": 14,
+    "model_aliases": 46
+  }
+}

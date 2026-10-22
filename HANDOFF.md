@@ -1,65 +1,67 @@
 # Aervane — development handoff
 
-Updated 2026-10-23. This file is the starting point for Codex, Claude, or a human contributor. Read actual source and rerun checks; this is a progress record, not proof that unfinished paths work.
+Updated 2026-10-23. Repository: https://github.com/kirniy/aervane, branch `fix/fan-control`.
 
-## Product brief
+## Current user priorities
 
-A very lightweight native macOS menu-bar-only fan utility. CPU temperature is the user's confirmed default. Opening the status item reveals one compact glass panel with a directly draggable percentage slider, automatic control, and editable presets. No separate fan-speed dialog. The user wants exceptional polish: restrained microinteractions, a custom identity, and the illuminated graduated/pixel texture of Claude Code / Codex effort sliders. Respect Reduce Motion and keyboard/VoiceOver use. Never run decorative animations while hidden.
+A tiny, exceptionally polished native macOS menu-bar temperature/fan utility. CPU is the original default; preserve the user's saved sensor selection. Percentage slider, editable presets, inline settings, no speed dialog. Use native Liquid Glass, precise microanimations, and minimal copy. The user explicitly requests real collaboration through `claude-vps`.
 
-The first chrome propeller icon was rejected. The current folded airflow icon is a second direction, not yet approved. The working name changed from Zephyr to Aervane after exact npm/Homebrew checks; see docs/name-check.md. Some internal target names still use Zephyr.
+Latest instructions:
 
-## Most recent user feedback — priority zero
+> Cut taglines, helper text and secondary labels. If a screen needs them to make sense, fix the layout.
 
-1. Clicking the menu-bar item while open must close the panel. A dismissal monitor previously closed it on mouse-down and the button action reopened it on mouse-up.
-2. The slider did not drag because it was disabled until the privileged helper was enabled. It must respond immediately and distinguish preview from applied state.
-3. The slider and overall craft need a stronger design pass. Use the effort-slider references as interaction inspiration; keep the finished app native and legible.
+> Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.
 
-Source now excludes the status-item rectangle from outside-dismiss monitors and runs the button action on mouse-down, avoiding close/reopen ordering. Slider previews work before setup. Claude's redesigned dot field uses native mouse event handlers, a larger hit area, cached layer images, and an inline editor. Codex fixed zero-size layer initialization, keyboard focus, accessibility setters, standard Edit commands, and hover cleanup.
+**High temperature must not block manual fan control.** The earlier 95°C restriction was an Aervane policy mistake, not an AppleSMC limit. It has been removed from both command acceptance and watchdog restoration. Never reintroduce a temperature-only override. Invalid/stale telemetry, lost clients, expired leases, hardware bounds and failed write rollback still matter.
 
-**Keyboard, AX adjustments and preset edit persistence were tested in the running Mac app. Physical pointer dragging and repeated status-item clicks remain unverified:** the available app-scoped automation cannot drag this control or address the status item. The control's pointer handlers are covered by regression tests; do not represent those as physical pointer testing.
+## What is now verified
 
-## Architecture
+- 89 tests pass on the actual Mac with Xcode 26.2. Production app/helper build and pass strict code-signature verification with the existing Apple development identity.
+- Installed signed helper approval and authenticated XPC work.
+- Real 100% → Auto test: independent SMC read saw `F0Md=1`, `F0Tg=4900`; fan reached about 4900 RPM. Auto then read `F0Md=0`; firmware subsequently returned to about 1000 RPM. Initial hottest CPU sample was 98.8°C.
+- Actual UI Boost and Auto actions succeeded. After removing the temperature policy, UI Balanced 60% also succeeded: independent target 2940 RPM, actual 2941 RPM, manual mode. Hottest sample in that separate physical test was 92.1°C. Tests additionally cover 60% retention at 100°C and 129°C; do not describe these simulated temperatures as physical measurements.
+- The root cause of the target verification error was write ordering. REA/Hopper shows the established controller switching modes before writing RPM. Aervane now does the same, with passive readback and rollback.
+- Missing XPC signing metadata was separately fixed by requesting `kSecCSSigningInformation`. Both app and helper still verify code-signing requirements.
+- The command queue preserves the latest user intent, including Auto during an in-flight write. Reconnection and quit use bounded callbacks and ownership-aware recovery.
+- The crash journal captures the raw pre-write target even in Auto, covering a crash between mode and target writes. This attribution is not an atomic hardware lock against other controllers.
 
-| Area | Files | Notes |
-| --- | --- | --- |
-| Menu bar, panel lifecycle | Sources/Zephyr/main.swift | AppKit, NSPanel, NSStatusItem, native glass on 26+ |
-| Interface | Sources/Zephyr/{PanelView,PercentSlider,Theme}.swift | Custom native controls, inline settings/preset editor |
-| Model/helper client | Sources/Zephyr/{AppModel,HelperClient,HelperInstaller}.swift | Serialized reads, XPC, ServiceManagement |
-| Hardware | Sources/SMC, Sources/SMCClient | Independent IOKit envelope; currently fan index 0 |
-| Helper | Sources/ZephyrHelper | Shared serial lease controller; authenticated XPC |
-| Pure policy | Sources/ZephyrCore | Limits, ownership, signing requirements, timeout state |
-| Verification | Tests, tools/smc-probe.c | Tests do not issue physical fan writes |
+## Sensor and key catalog
 
-## Build and verification
+See [the complete embedded compatibility catalog](docs/compatibility/mfc-1.5.21/README.md). It contains 237 unique SMC temperature identifiers, 414 sensor occurrences, 205 sensor/group rules, 46 model aliases, 14 fan-label entries and all 15 initialized SMC control constants. The sensor resources were verified identical in both architecture slices; control predicates were checked against ARM64 instructions. Scope limits are explicit.
 
-Use Xcode 26.2+ (`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`). `swift test` passed **30 tests** locally on 2026-10-23; the three UI tests passed again after the final hover/keyboard changes. `tools/build.sh` produced a development-signed app and helper, verified with `codesign --verify --deep --strict`. The latest signed build is also installed at `/Applications/Aervane.app` on the development Mac. No privileged helper has been enabled.
+`Mac16,10` maps to `Macmini11,1`. Aervane now reads its exact ten CPU keys, including previously missing `Te0U` and `Te0V`. The catalog's GPU keys `Tg04` and `Tg12` were absent in the live probe on this machine; GPU selection must report unavailable rather than mislabel unrelated sensors. Other models retain the previous candidate fallback; the catalog is not a claim that Aervane controls every model yet.
 
-Read-only probe: `dist/Aervane.app/Contents/MacOS/Aervane --probe`.
+## Architecture and file ownership
 
-Local machine: M4 Mac mini, Mac16,10, macOS 27.0. CPU mean and one fan were read successfully. Firmware minimum around 1000 RPM, maximum around 4800 RPM: true 0% is unavailable. UI must not relabel minimum as zero. See `docs/performance.md` for short measured samples, including their limits and the higher startup peak.
+| Area | Files |
+| --- | --- |
+| Menu bar, panel lifecycle | `Sources/Zephyr/main.swift` |
+| Native UI | `Sources/Zephyr/{PanelView,PercentSlider,Theme}.swift` |
+| Model/helper communication | `Sources/Zephyr/{AppModel,HelperClient,HelperInstaller}.swift` |
+| Hardware read/write | `Sources/SMC`, `Sources/SMCClient` |
+| Authenticated helper, recovery journal | `Sources/ZephyrHelper` |
+| Transactions, leases, command queue | `Sources/ZephyrCore` |
 
-The available certificate is an Apple development identity, not Developer ID Application. No private keys or signing credentials belong in this repository. Public notarization is not complete.
-
-## Outstanding work
-
-- Verify open/close by clicking the actual menu bar item repeatedly; outside click and Escape; rapid toggling and multiple displays.
-- Finish physical pointer testing: thumb grab, track click, release outside, Escape mid-drag and sample refresh during drag. Keyboard arrows, Shift+arrows, AX set value, and presets work in the live app.
-- Check real VoiceOver, Reduce Motion, light mode, 1× displays, and multiple monitors. The dark capture passed an independent Impeccable visual review (`ship`); that verdict covers the captured appearance only. The README uses an actual development capture.
-- Finish helper installation on the signed app and verify controlled physical writes, actual readback, automatic restoration, app crash, lease expiry, sensor faults, and helper failure. No physical writes have been tested yet.
-- Expand model sensor coverage and support for more than one fan. Strict SMC type/length/bounds validation, missing discovered CPU sensors, and Intel fallback have automated coverage. Current physical hardware coverage is narrow.
-- Physically verify the helper's journal/restart recovery. Production-adapter tests cover non-owner journal preservation, previous target recovery, obsolete journal rejection, startup retry without clients, and restrictive permissions.
-- Add deterministic AppModel XPC/poll ordering tests. Current generation guards discard pre-command polls and late callbacks from disconnected helpers; polling pauses during commands. These race fixes received source review but not a mocked callback-order regression suite.
-- Create and verify a notarized release, then a real Homebrew cask. The current cask is a template only.
-- Keep the project runtime dependency-free. DESIGN.md and `.impeccable/design.json` are present and grounded in the current native sources.
+Keep native runtime dependency-free. Hardware control currently requires one fan and the supported mode key. Never import vendor binaries, assets or decompiled code. Compatibility facts and independent code are in the repo.
 
 ## Collaboration
 
-Codex handled local macOS integration, hardware policy/recovery, signing, repository management and testing. Claude was actually invoked through the user's `claude-vps` launcher, cloned the public repo, and redesigned `PercentSlider.swift`, `PanelView.swift` and `Theme.swift`. Its draft was imported, compiled and corrected on the Mac. A subsequent Claude review found hover and busy-state polish issues, which were incorporated.
+Actual Claude session `48ef955d-dd80-4094-b719-459f7e1f5917` through the user's `claude-vps` launcher implemented both an earlier UI pass and the control repair. Its repair workspace was `/workspace/aervane-repair-20261023`. The integrated repository is authoritative; old remote drafts do not include the local journal, sensor and temperature-policy corrections. Start a fresh clone for the next UI pass, restrict edits to native UI files, and let the parent run Mac builds and hardware verification.
 
-Claude's VPS worktree is `/workspace/aervane-design-20261022`. Its original draft is older than this repository: **pull/use this repository as the source of truth; do not replace the integrated files with that draft.** The follow-up session ID is `48ef955d-dd80-4094-b719-459f7e1f5917` for the user's launcher. The first long-running print session was stopped after its files were retrieved; the concise follow-up completed successfully. No other Claude work was interrupted.
+## Build and test
 
-Coordinate file ownership before concurrent editing. Linux/VPS review cannot validate AppKit rendering or hardware. Every imported change still needs a Mac build and appropriate verification. See `CLAUDE.md`.
+```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+swift test
+tools/build.sh
+```
 
-## Reverse-engineering scope
+Set `SIGN_IDENTITY` for an Apple-signed helper build. The installed app is `/Applications/Aervane.app`. Read-only diagnostics: `Aervane --probe`. Explicit hardware verification: `Aervane --verify-control` (100% briefly, then Auto; only run within user authorization). Close the competing controller for an isolated test.
 
-REA/Hopper decompilation verified the installed helper's SMC read/write envelope and XPC write-handler behavior. This is a bounded interoperability investigation, not a claim that every feature or function in Macs Fan Control has been reverse engineered. Only independent code and summarized evidence belong in the public repo. See docs/reverse-engineering.md.
+## Open validation and distribution work
+
+- Physical pointer drag, repeated actual status-item clicks, outside dismissal, rapid toggles and multiple monitors. Native handler regression tests and keyboard/accessibility paths pass; app-scoped CUA reports `AXError.notImplemented` for pointer drag/click on the custom slider. Do not claim a physical drag test.
+- Real VoiceOver, Reduce Motion/Transparency, light theme, 1× screens and long-content states.
+- Physical helper/app crash, sleep/wake and expired-lease scenarios beyond the controlled normal restoration tests.
+- More Mac models, multiple fans and Intel/alternate mode-key support.
+- Public Developer ID signing, notarization, release install and a real Brew cask. The current identity is development-only; `Casks/aervane.rb.in` remains a template.

@@ -1,0 +1,16 @@
+value,kind,purpose,slot,seed_function
+#KEY,smc_identifier,key count,0x1002d5358,0x1001e51f8
+FNum,smc_identifier,fan count,0x1002d5360,0x1001e525c
+FS! ,smc_identifier,aggregate manual-mode mask,0x1002d5368,0x1001e52c0
+F{}ID,smc_identifier,per-fan identifier,0x1002d5370,0x1001e5324
+F{}Mn,smc_identifier,minimum fan speed,0x1002d5378,0x1001e5394
+F{}Mx,smc_identifier,maximum fan speed,0x1002d5380,0x1001e5404
+F{}Ac,smc_identifier,actual fan speed,0x1002d5388,0x1001e5474
+F{}Tg,smc_identifier,target fan speed,0x1002d5390,0x1001e54e4
+F{}Sf,smc_identifier,per-fan identifier; exact role not established in this pass,0x1002d5398,0x1001e5554
+F{}Md,smc_identifier,default per-fan mode spelling,0x1002d53a0,0x1001e55c4
+F{}md,smc_identifier,newer alternate per-fan mode spelling,0x1002d53a8,0x1001e5634
+Ftst,smc_identifier,additional aggregate control flag on selected models,0x1002d53b0,0x1001e56a4
+LKSB,smc_identifier,initialized SMC identifier; purpose not established in this pass,0x1002d53b8,0x1001e5708
+sp78,data_type,signed fixed-point temperature data type,0x1002d53c0,0x1001e576c
+flt ,data_type,floating-point data type,0x1002d53c8,0x1001e57d0

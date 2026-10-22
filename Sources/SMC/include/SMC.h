@@ -16,6 +16,10 @@ int zsmc_key_at_index(uint32_t index, uint32_t *key);
 // Pure mapping shared by writes and regression tests. Percent is physical
 // target / maximum, clamped to the firmware floor (never range-normalized).
 int zsmc_target_rpm(double minimum, double maximum, double percent, double *target);
-int zsmc_set_fan_percent(uint32_t fan_index, double percent);
-int zsmc_set_fan_automatic(uint32_t fan_index);
+// Single-key fan writes. The order, settling and readback of a complete
+// control change live in ZephyrCore's FanWriteTransaction, not in C.
+// Target: RPM within the firmware F<n>Mn...F<n>Mx range, flt or fpe2 encoded.
+int zsmc_write_fan_target(uint32_t fan_index, double rpm);
+// Mode: 0 automatic or 1 manual, written only to an existing ui8 F<n>Md key.
+int zsmc_write_fan_mode(uint32_t fan_index, uint8_t mode);
 #endif

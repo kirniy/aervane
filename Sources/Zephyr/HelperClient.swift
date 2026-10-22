@@ -3,10 +3,9 @@ import ZephyrCore
 
 public final class HelperClient: NSObject, @unchecked Sendable {
     public static let serviceName = "dev.kirniy.aervane.helper"
-    private static let requestTimeout: TimeInterval = 5
-
     private let connection: NSXPCConnection
-    private let requestTimeout: TimeInterval
+    private let statusTimeout: TimeInterval
+    private let commandTimeout: TimeInterval
     private let lock = NSLock()
     private var activated = false
     private var disconnectNotified = false
@@ -18,10 +17,12 @@ public final class HelperClient: NSObject, @unchecked Sendable {
                   requirementProvider: { SigningRequirement.requirement(identifier: "dev.kirniy.aervane.helper") })
     }
 
-    init(serviceName: String, requestTimeout: TimeInterval = HelperClient.requestTimeout,
+    init(serviceName: String, statusTimeout: TimeInterval = FanSafety.statusReplyTimeout,
+         commandTimeout: TimeInterval = FanSafety.commandReplyTimeout,
          requirementProvider: @escaping () -> String?) {
         connection = NSXPCConnection(machServiceName: serviceName, options: .privileged)
-        self.requestTimeout = requestTimeout
+        self.statusTimeout = statusTimeout
+        self.commandTimeout = commandTimeout
         super.init()
         connection.remoteObjectInterface = NSXPCInterface(with: FanControlXPCProtocol.self)
         connection.invalidationHandler = { [weak self] in self?.notifyDisconnected() }
@@ -39,22 +40,24 @@ public final class HelperClient: NSObject, @unchecked Sendable {
     }
 
     public func snapshot(_ reply: @escaping (Result<FanSnapshot, Error>) -> Void) {
-        perform(reply) { remote, completion in remote.snapshot(withReply: completion) }
+        perform(timeout: statusTimeout, reply) { remote, completion in remote.snapshot(withReply: completion) }
     }
 
     public func set(percent: Double, _ reply: @escaping (Result<FanSnapshot, Error>) -> Void) {
-        perform(reply) { remote, completion in remote.setFanPercent(percent, withReply: completion) }
+        perform(timeout: commandTimeout, reply) { remote, completion in remote.setFanPercent(percent, withReply: completion) }
     }
 
     public func automatic(_ reply: @escaping (Result<FanSnapshot, Error>) -> Void) {
-        perform(reply) { remote, completion in remote.restoreAutomatic(withReply: completion) }
+        perform(timeout: commandTimeout, reply) { remote, completion in remote.restoreAutomatic(withReply: completion) }
     }
 
     public func heartbeat(_ reply: @escaping (Error?) -> Void = { _ in }) {
         if let readyError = ensureReady() { reply(readyError); return }
-        let gate = HelperReplyGate<Error?>(timeout: requestTimeout) { [weak self] in
+        // A heartbeat can queue behind a full command on the helper's serial
+        // queue, so it shares the command deadline rather than the status one.
+        let gate = HelperReplyGate<Error?>(timeout: commandTimeout) { [weak self] in
             self?.invalidate()
-            reply(FanControlError.unavailable)
+            reply(FanControlError.timedOut)
         }
         guard let remote = proxy(error: { error in gate.finish(error) { reply($0) } }) else {
             gate.finish(FanControlError.unavailable) { reply($0) }
@@ -65,12 +68,14 @@ public final class HelperClient: NSObject, @unchecked Sendable {
 
     public func invalidate() { connection.invalidate() }
 
-    private func perform(_ reply: @escaping (Result<FanSnapshot, Error>) -> Void,
+    private func perform(timeout: TimeInterval, _ reply: @escaping (Result<FanSnapshot, Error>) -> Void,
                          _ invoke: @escaping (FanControlXPCProtocol, @escaping (Data?, Error?) -> Void) -> Void) {
         if let readyError = ensureReady() { reply(.failure(readyError)); return }
-        let gate = HelperReplyGate<Result<FanSnapshot, Error>>(timeout: requestTimeout) { [weak self] in
+        // A missed deadline invalidates the connection: the helper then treats
+        // this session as disconnected and restores any fan it owns.
+        let gate = HelperReplyGate<Result<FanSnapshot, Error>>(timeout: timeout) { [weak self] in
             self?.invalidate()
-            reply(.failure(FanControlError.unavailable))
+            reply(.failure(FanControlError.timedOut))
         }
         guard let remote = proxy(error: { error in gate.finish(.failure(error)) { reply($0) } }) else {
             gate.finish(.failure(FanControlError.unavailable)) { reply($0) }
@@ -101,6 +106,14 @@ public final class HelperClient: NSObject, @unchecked Sendable {
         let handler = disconnectHandler
         lock.unlock()
         handler?()
+    }
+
+    /// Maps the helper's wire errors back to FanControlError so the app can
+    /// act on the kind of failure, not only display its text.
+    static func classify(_ error: Error) -> FanControlError? {
+        if let error = error as? FanControlError { return error }
+        let nsError = error as NSError
+        return FanControlError.fromWire(domain: nsError.domain, code: nsError.code, message: nsError.localizedDescription)
     }
 
     private static func decode(_ data: Data?, _ error: Error?) -> Result<FanSnapshot, Error> {

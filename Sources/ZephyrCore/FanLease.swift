@@ -100,9 +100,11 @@ public final class FanRecoveryController {
     public func set(percent: Double, session: UUID, beforeWrite: ((FanSnapshot) throws -> Void)? = nil) throws -> FanSnapshot {
         let requested = try FanSafety.validate(percent: percent)
         let wasOwner = state.owns(session)
-        guard state.claim(session), !state.restorePending else { throw FanControlError.unavailable }
+        guard state.claim(session) else { throw FanControlError.unavailable }
+        guard !state.restorePending else {
+            throw FanControlError.hardwareFailure("Automatic control is still being restored and verified. Try again in a few seconds.")
+        }
         var writeAttempted = false
-        var keepMaximumCooling = false
         do {
             let before = try driver.snapshot()
             lastValidSnapshot = before
@@ -113,10 +115,6 @@ public final class FanRecoveryController {
             guard before.fanCount == 1 else {
                 throw FanControlError.hardwareFailure("Manual control for multiple-fan Macs is not supported yet.")
             }
-            if before.temperatureCelsius >= FanSafety.criticalTemperatureCelsius && requested != 100 {
-                keepMaximumCooling = wasOwner && FanSafety.isMaximumCooling(before)
-                throw FanControlError.tooHot(before.temperatureCelsius)
-            }
             lastHeartbeat = now()
             try beforeWrite?(before)
             writeAttempted = true
@@ -125,22 +123,33 @@ public final class FanRecoveryController {
             lastValidSnapshot = after
             let expected = FanSafety.hardwareFloorClampedPercent(requested, snapshot: after)
             guard !after.automatic,
-                  FanSafety.matchesRequestedPercent(after.targetPercent, expected: expected),
-                  !FanSafety.shouldRestoreAutomatic(snapshot: after, now: now(), lastHeartbeat: lastHeartbeat) else {
-                throw FanControlError.hardwareFailure("Fan target did not verify after setting.")
+                  FanSafety.matchesRequestedPercent(after.targetPercent, expected: expected) else {
+                let observed = after.automatic ? "Auto" : after.targetPercent.map { String(format: "manual %.1f%%", $0) } ?? "manual, no target"
+                throw FanControlError.hardwareFailure("Fan target did not verify after setting: expected \(Int(expected.rounded()))%, read \(observed).")
+            }
+            guard !FanSafety.shouldRestoreAutomatic(snapshot: after, now: now(), lastHeartbeat: lastHeartbeat) else {
+                throw FanControlError.hardwareFailure("Fan reached the target, but the post-write safety check failed (hottest \(Int(after.temperatureCelsius.rounded()))°C).")
             }
             state.didSetManual(session)
             return after
         } catch {
+            var rolledBack: Bool?
             if writeAttempted && state.owns(session) {
                 state.requestRestore(session)
-                _ = attemptRestore(session)
+                rolledBack = attemptRestore(session)
             }
-            if !writeAttempted && wasOwner && state.owns(session) && !keepMaximumCooling {
+            if !writeAttempted && wasOwner && state.owns(session) {
                 state.requestRestore(session)
-                _ = attemptRestore(session)
+                rolledBack = attemptRestore(session)
             } else if !writeAttempted && !wasOwner && state.owns(session) {
                 state.restoreConfirmed(session)
+            }
+            // Tell the caller what state the hardware was left in, not only
+            // why the command failed.
+            if case FanControlError.hardwareFailure(let message) = error, let rolledBack {
+                throw FanControlError.hardwareFailure(message + (rolledBack
+                    ? " Automatic control was restored and verified."
+                    : " Automatic restore did not verify yet; the helper keeps retrying."))
             }
             throw error
         }
@@ -148,7 +157,7 @@ public final class FanRecoveryController {
 
     @discardableResult
     public func restore(_ session: UUID) throws -> FanSnapshot {
-        guard state.owns(session) else { throw FanControlError.unavailable }
+        guard state.owns(session) else { throw FanControlError.notOwner }
         state.requestRestore(session)
         guard attemptRestore(session) else {
             throw FanControlError.hardwareFailure("Automatic mode did not verify after restore.")

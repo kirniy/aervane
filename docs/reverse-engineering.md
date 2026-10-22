@@ -83,8 +83,16 @@ The key-count/index commands are rejected on this platform, so Aervane uses a
 small model-aware candidate list and verifies each key by key-info/read. This
 is an explicit coverage limit, not evidence that no additional sensors exist.
 
-`zsmc_set_fan_percent` computes a physical percentage of `F%dMx` and clamps
+The target calculation computes a physical percentage of `F%dMx` and clamps
 the result to `F%dMn`…`F%dMx`. The UI clamps its minimum to the corresponding
 nonzero percentage. True 0% is available only when the firmware minimum is zero.
-A nonzero minimum is never relabeled as zero. Writes have not yet been verified
-on physical hardware.
+A nonzero minimum is never relabeled as zero. Physical 100% and 60% writes and return to Auto are now verified on Mac16,10; see [the verification record](verification.md).
+
+
+## Corrected constant-speed transaction and complete catalog
+
+The ARM64 `applyFanProfileToSMC` path calls `setFansControlModes` before `setFanRPM` (REA `ev_188e092159581d8401c68a40473d1c2dc10eaa0d38b32491173d2d4069143965`). Writing the target first failed on the development Mac. Mode first, then target, succeeded with independent readback and physical fan response.
+
+[The extracted catalog](compatibility/mfc-1.5.21/README.md) contains all five embedded resources as compatibility facts and all fifteen SMC-initializer constants. It records the model-dependent `F{}Md`, `F{}md`, `Ftst` and legacy `FS! ` paths. Strict comparison boundaries were checked against assembly, since Hopper pseudocode misrepresented some of them. The resources match in both architecture slices; control-function analysis is ARM64-scoped.
+
+The prior 95°C restriction was an Aervane policy choice, not a finding from Macs Fan Control or AppleSMC. It has been removed: valid high temperature alone neither rejects a manual request nor forces Auto. Invalid/stale readings and lost ownership still trigger recovery.

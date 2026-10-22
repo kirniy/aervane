@@ -8,6 +8,7 @@ private final class FakeRecoveryDriver: FanRecoveryDriver {
     var restoreError: Error?
     var partialWriteThenError = false
     var automaticValue = false
+    var setResultOverride: Double?
 
     init(target: Double? = 40, minimum: Double = 1000, maximum: Double = 4800) {
         snapshotValue = FanSnapshot(currentRPM: 2000, minimumRPM: minimum, maximumRPM: maximum,
@@ -30,7 +31,7 @@ private final class FakeRecoveryDriver: FanRecoveryDriver {
         if let setError { throw setError }
         let floor = snapshotValue.minimumRPM / snapshotValue.maximumRPM * 100
         snapshotValue = FanSnapshot(currentRPM: 2000, minimumRPM: snapshotValue.minimumRPM,
-                                    maximumRPM: snapshotValue.maximumRPM, targetPercent: max(percent, floor),
+                                    maximumRPM: snapshotValue.maximumRPM, targetPercent: setResultOverride ?? max(percent, floor),
                                     automatic: false, temperatureCelsius: 60)
     }
     func restoreAutomatic() throws {
@@ -89,5 +90,45 @@ final class FanRecoveryControllerTests: XCTestCase {
         driver.restoreError = nil
         controller.tick()
         XCTAssertFalse(controller.state.owns(session))
+    }
+
+    func testFailedWriteReportsVerifiedRollback() {
+        let driver = FakeRecoveryDriver()
+        driver.setError = FanControlError.hardwareFailure("Fan target did not verify after setting.")
+        let controller = FanRecoveryController(driver: driver)
+        XCTAssertThrowsError(try controller.set(percent: 100, session: UUID())) { error in
+            XCTAssertEqual(error.localizedDescription, "Fan target did not verify after setting. Automatic control was restored and verified.")
+        }
+    }
+
+    func testFailedWriteReportsPendingRollbackTruthfully() {
+        let driver = FakeRecoveryDriver()
+        driver.setError = FanControlError.hardwareFailure("Fan target did not verify after setting.")
+        driver.restoreError = FanControlError.hardwareFailure("restore")
+        let controller = FanRecoveryController(driver: driver)
+        let session = UUID()
+        XCTAssertThrowsError(try controller.set(percent: 100, session: session)) { error in
+            XCTAssertTrue(error.localizedDescription.hasSuffix("Automatic restore did not verify yet; the helper keeps retrying."))
+        }
+        XCTAssertTrue(controller.state.restorePending)
+    }
+
+    func testReadbackMismatchNamesWhatWasRead() {
+        let driver = FakeRecoveryDriver()
+        driver.setResultOverride = 37
+        let controller = FanRecoveryController(driver: driver)
+        XCTAssertThrowsError(try controller.set(percent: 100, session: UUID())) { error in
+            XCTAssertTrue(error.localizedDescription.contains("expected 100%, read manual 37.0%"), error.localizedDescription)
+        }
+    }
+
+    /// Regression: restore from a session whose lease the helper already
+    /// ended must say so distinctly, so the app clears ownership instead of
+    /// showing a restore failure.
+    func testRestoreAfterLeaseEndedReportsNotOwner() {
+        let controller = FanRecoveryController(driver: FakeRecoveryDriver())
+        XCTAssertThrowsError(try controller.restore(UUID())) { error in
+            guard case FanControlError.notOwner = error else { return XCTFail("\(error)") }
+        }
     }
 }

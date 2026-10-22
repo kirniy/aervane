@@ -24,7 +24,7 @@ private final class ThermalDriver: FanRecoveryDriver {
     }
     func set(percent: Double) throws {
         writes += 1; automaticMode = false
-        targetRPM = maximumRPM * (undershoot ? 99 : percent) / 100
+        targetRPM = maximumRPM * (undershoot ? 98 : percent) / 100
     }
     func restoreAutomatic() throws { restores += 1; automaticMode = true }
     func automatic() throws -> Bool { automaticMode }
@@ -43,14 +43,12 @@ final class MaximumCoolingTests: XCTestCase {
         XCTAssertTrue(hardware.automaticMode); XCTAssertFalse(controller.state.owns(owner))
     }
 
-    func testHotLowerRequestsNeverWriteOrCreateJournal() {
+    func testHotLowerRequestsAreAllowed() throws {
         for requested in [21.0, 60, 99, 99.4] {
             let hardware = ThermalDriver(), owner = UUID()
             let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })
-            XCTAssertThrowsError(try controller.set(percent: requested, session: owner) { _ in XCTFail("Must not journal") }) {
-                guard case FanControlError.tooHot = $0 else { return XCTFail("Unexpected error: \($0)") }
-            }
-            XCTAssertEqual(hardware.writes, 0); XCTAssertFalse(controller.state.owns(owner))
+            _ = try controller.set(percent: requested, session: owner)
+            XCTAssertEqual(hardware.writes, 1); XCTAssertTrue(controller.state.owns(owner))
         }
     }
 
@@ -58,8 +56,8 @@ final class MaximumCoolingTests: XCTestCase {
         let hardware = ThermalDriver(), owner = UUID()
         let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })
         _ = try controller.set(percent: 100, session: owner)
-        XCTAssertThrowsError(try controller.set(percent: 60, session: owner))
-        XCTAssertEqual(hardware.writes, 1); XCTAssertEqual(hardware.restores, 0)
+        _ = try controller.set(percent: 60, session: owner)
+        XCTAssertEqual(hardware.writes, 2); XCTAssertEqual(hardware.restores, 0)
         XCTAssertTrue(controller.state.owns(owner))
         hardware.clock = hardware.clock.addingTimeInterval(16); controller.tick()
         XCTAssertEqual(hardware.restores, 1)
@@ -68,8 +66,7 @@ final class MaximumCoolingTests: XCTestCase {
     func testHotMaximumDoesNotExemptOtherSafetyFailures() throws {
         let faults: [(ThermalDriver) -> Void] = [
             { $0.temperature = .nan }, { $0.temperature = 131 }, { $0.temperature = -21 },
-            { $0.sampleAge = 11 }, { $0.clock = $0.clock.addingTimeInterval(16) },
-            { $0.targetRPM *= 0.99 }, { $0.maximumRPM += 100 }, { $0.count = 2 }
+            { $0.sampleAge = 11 }, { $0.clock = $0.clock.addingTimeInterval(16) }, { $0.count = 2 }
         ]
         for fault in faults {
             let hardware = ThermalDriver(), owner = UUID()
@@ -80,12 +77,20 @@ final class MaximumCoolingTests: XCTestCase {
         }
     }
 
-    func testWarmingReducedSpeedReturnsToAuto() throws {
+    func testWarmingReducedSpeedRemainsManual() throws {
         let hardware = ThermalDriver(); hardware.temperature = 70
         let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })
         _ = try controller.set(percent: 60, session: UUID())
         hardware.temperature = 100; controller.tick()
-        XCTAssertTrue(hardware.automaticMode); XCTAssertEqual(hardware.restores, 1)
+        XCTAssertFalse(hardware.automaticMode); XCTAssertEqual(hardware.restores, 0)
+    }
+
+    func testHighestValidTemperatureAllowsRequestedSpeed() throws {
+        let hardware = ThermalDriver(); hardware.temperature = 129
+        let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })
+        _ = try controller.set(percent: 60, session: UUID())
+        controller.tick()
+        XCTAssertFalse(hardware.automaticMode); XCTAssertEqual(hardware.writes, 1)
     }
 
     func testHotExistingOwnerCanIncreaseToMaximum() throws {

@@ -23,4 +23,10 @@ final class ServiceErrorTests: XCTestCase {
         let data = try NSKeyedArchiver.archivedData(withRootObject: error, requiringSecureCoding: true)
         return try XCTUnwrap(NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data))
     }
+
+    func testLeaseAndTimeoutErrorsHaveDistinctWireCodes() {
+        XCTAssertEqual(FanControlService.xpcError(FanControlError.timedOut).code, 7)
+        XCTAssertEqual(FanControlService.xpcError(FanControlError.notOwner).code, 8)
+        XCTAssertEqual(FanControlService.xpcError(FanControlError.notOwner).localizedDescription, FanControlError.notOwner.errorDescription)
+    }
 }

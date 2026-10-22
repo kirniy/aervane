@@ -103,7 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else { panel.setFrame(frame, display: false) }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !ending, model.ownsControl else { return .terminateNow }; ending = true
+        // A command in flight may be taking control right now, so it also
+        // needs the Auto request (queued behind it) before quitting.
+        guard !ending, model.ownsControl || model.busy else { return .terminateNow }; ending = true
         var replied = false
         let replyOnce = {
             guard !replied else { return }
@@ -111,7 +113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         model.restore(completion: replyOnce)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: replyOnce)
+        // Quitting closes the XPC connection, and the helper restores a
+        // dropped session's fan, so the bounded wait is only for a clean,
+        // confirmed restore when the helper answers promptly.
+        DispatchQueue.main.asyncAfter(deadline: .now() + FanSafety.commandReplyTimeout, execute: replyOnce)
         return .terminateLater
     }
 }
@@ -141,6 +146,8 @@ if CommandLine.arguments.contains("--verify-control") {
         let fan = try reader.readFan(), temp = try reader.readCPUTemperature(), hottest = try reader.readCPUHottestTemperature()
         let target = fan.targetPercent.map { String(format: "%.1f%%", $0) } ?? "Auto"
         print("CPU \(String(format: "%.1f", temp))°C | Hottest \(String(format: "%.1f", hottest))°C | Fan \(Int((fan.currentRPM / fan.maximumRPM * 100).rounded()))% | Target \(target) | Minimum \(Int(ceil(fan.minimumRPM / fan.maximumRPM * 100)))% | \(fan.automatic ? "Auto" : "Manual")")
+        let raw = try reader.readFanRegisters()
+        print("F0Md \(raw.mode) | F0Tg \(String(format: "%.1f", raw.targetRPM)) | F0Ac \(String(format: "%.1f", raw.actualRPM)) | F0Mn \(String(format: "%.1f", raw.minimumRPM)) | F0Mx \(String(format: "%.1f", raw.maximumRPM)) | FNum \(try reader.readFanCount())")
     }
     catch { fputs("\(error)\n", stderr); exit(1) }
 } else {

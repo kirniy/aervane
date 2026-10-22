@@ -49,4 +49,15 @@ final class HelperClientTests: XCTestCase {
         }
         wait(for: [first, late], timeout: 0.15)
     }
+
+    /// Regression: a heartbeat answered "not owner" used to mark the whole
+    /// helper as disconnected. The app must be able to tell lease endings
+    /// from transport failures after the error crosses XPC.
+    func testWireErrorsClassifyByKind() {
+        let notOwner = NSError(domain: FanControlError.wireDomain, code: FanControlError.notOwner.wireCode,
+                               userInfo: [NSLocalizedDescriptionKey: "x"])
+        guard case .notOwner? = HelperClient.classify(notOwner) else { return XCTFail("not classified") }
+        guard case .timedOut? = HelperClient.classify(FanControlError.timedOut) else { return XCTFail("timeout") }
+        XCTAssertNil(HelperClient.classify(NSError(domain: NSCocoaErrorDomain, code: 4097)))
+    }
 }
