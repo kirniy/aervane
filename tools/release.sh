@@ -2,12 +2,17 @@
 set -euo pipefail
 ROOT=${0:A:h:h}
 cd "$ROOT"
+if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
 "$ROOT/tools/build.sh"
 # Filesystem metadata is not part of this bundle. In particular, restored
 # FinderInfo/resource forks can invalidate an otherwise valid code signature.
 ditto --norsrc --noextattr -c -k --keepParent "$ROOT/dist/Aervane.app" "$ROOT/dist/Aervane.app.zip"
 if [[ -n "${NOTARY_PROFILE:-}" ]]; then
-  if ! codesign --display --verbose=4 "$ROOT/dist/Aervane.app" 2>&1 | rg -q '^Authority=Developer ID Application:'; then
+  # Consume all output: rg -q can close the pipe early, making a valid
+  # codesign command fail with SIGPIPE under pipefail.
+  if ! codesign --display --verbose=4 "$ROOT/dist/Aervane.app" 2>&1 | rg '^Authority=Developer ID Application:' > /dev/null; then
     echo 'Public notarization requires a Developer ID Application signing identity.' >&2
     exit 1
   fi

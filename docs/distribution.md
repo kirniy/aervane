@@ -2,7 +2,7 @@
 
 Aervane ships as a native macOS app through [kirniy/tap](https://github.com/kirniy/homebrew-tap). No Node runtime or npm account is needed.
 
-The first public release is **not published yet**. Developer ID signing and notarization must be completed before this command can install it:
+Install the signed and notarized release:
 
 ```sh
 brew install --cask kirniy/tap/aervane
@@ -12,7 +12,7 @@ The initial release targets Apple Silicon and macOS 14+. A tap provides an insta
 
 ## Signing
 
-Apple requires a **Developer ID Application** certificate, Hardened Runtime and a secure timestamp for notarization. The development certificate currently on this Mac is insufficient. The owner confirms an existing paid Apple Developer membership. Creating a Developer ID certificate requires the Account Holder role. [Apple's certificate instructions](https://developer.apple.com/help/account/certificates/create-developer-id-certificates), [notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
+Apple requires a **Developer ID Application** certificate, Hardened Runtime and a secure timestamp for notarization. A Developer ID certificate and local notarization Keychain profile are now configured on the signing Mac. Creating a Developer ID certificate requires the Account Holder role. [Apple's certificate instructions](https://developer.apple.com/help/account/certificates/create-developer-id-certificates), [notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
 
 Keep the private key in the local keychain. Configure `xcrun notarytool store-credentials aervane-notary` through its secure interactive prompt, never command history or repository files. API-key credentials are also supported. The release does not require uploading signing keys to GitHub.
 
@@ -21,6 +21,7 @@ Keep the private key in the local keychain. Configure `xcrun notarytool store-cr
 Set the numeric version in `VERSION`, then run on the signing Mac:
 
 ```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 swift test
 SIGN_IDENTITY='Developer ID Application: …' NOTARY_PROFILE=aervane-notary tools/release.sh
 python3 tools/prepare-distribution.py
@@ -41,3 +42,9 @@ Ad hoc and development-signed archives are rejected. No placeholder checksums ar
 Quit Aervane before upgrading; normal Quit restores automatic fan control. The cask's uninstall hook unregisters the signed helper after quitting the app. An unregistered or missing helper exits successfully without requiring a hardware probe. Setup may request macOS approval again when the new app opens.
 
 Keep release assets immutable after publication. A correction requires a new version. The app does not poll for updates; `brew upgrade --cask kirniy/tap/aervane` performs an explicit upgrade.
+
+## 0.2.0 release receipt
+
+Apple accepted notarization submission `f68f7cab-e535-4d76-b5e5-e0afe2307797`. The app was stapled and validated, then re-archived and extracted for strict signature verification. Distribution preparation also passed Gatekeeper assessment, arm64 and minimum-version checks, matching app/helper Developer ID teams, and ticket validation.
+
+Archive SHA-256: `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`.

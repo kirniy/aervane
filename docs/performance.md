@@ -1,5 +1,13 @@
 # Resource measurements
 
+## Version 0.2.0
+
+The signed release with both slider styles was exercised on the M4 Mac mini (32 GB), macOS 27.0, with Expressive effects. A subsequent 30-second sample with the panel closed, normal three-second polling and manual 76% control measured **0.40% of one CPU core** and a **34.1 MiB physical footprint** for the app. RSS was 78.2 MiB; lifetime peak footprint after startup and interface exercise was 91.7 MiB. Memory is a single sample, not an average. The helper was running; it is not included in these app-only figures.
+
+The signed bundle contains **3.14 MiB** of file data. No web runtime, runtime packages, telemetry or background network requests are included. Only the selected slider style retains its cached artwork; switching removes the previous layers and their animations.
+
+## Earlier development measurement
+
 Installed development build on an M4 Mac mini (32 GB), macOS 27.0, Xcode 26.2 release optimization, 2026-10-23. Measured after exercising the redesigned panel, with Expressive effects selected and the signed privileged helper running. Other desktop work was running.
 
 | State | App CPU, one core | Helper CPU, one core | App physical footprint | App RSS | Helper RSS |

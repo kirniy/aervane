@@ -185,7 +185,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         let sliderTop = y
         put(slider, m - 16, y, w + 32, 34)
         y += 34
-        let floorX = (m - 16) + PercentSlider.trackX(percent: model.minimumPercent, width: w + 32)
+        let floorX = (m - 16) + PercentSlider.trackX(percent: model.minimumPercent, width: w + 32, style: slider.style)
         put(floorLabel, max(m - 6, floorX - 22), y - 3, 44, 13)
         y += 10 + 10
         // Presets wrap into rows of at most three: 1–3 → one row, 4 → 2×2,
@@ -224,6 +224,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     func update() {
         let prefs = PresentationPreferences.shared, effects = Theme.effects
         slider.effects = effects
+        slider.style = prefs.sliderStyle
         chart.heatColor = prefs.heatColor
         // Temperature: number, unit, sensor tag and heat band.
         let state = model.stale ? ThermalState.unknown : ThermalState.classify(model.displayTemperature, previous: thermal)
@@ -287,7 +288,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         message.toolTip = model.error
         settingsPage.updateStatus()
 
-        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorRows.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)|\(percent.stringValue.count)|\(model.minimumPercent)|\(settingsPage.layoutKey)"
+        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorRows.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)|\(percent.stringValue.count)|\(model.minimumPercent)|\(slider.style.rawValue)|\(settingsPage.layoutKey)"
         if key != layoutKey { layoutKey = key; needsLayout = true }
         resize?(desiredHeight)
     }
@@ -731,6 +732,7 @@ final class SettingsView: FlippedView {
     private let menuBar = NSSegmentedControl(labels: MenuBarContent.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
     private let spacing = NSSegmentedControl(labels: MenuBarSpacing.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
     private let effects = NSSegmentedControl(labels: EffectsLevel.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
+    private let sliderStyle = NSSegmentedControl(labels: SliderStyle.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
     private let heat = NSSwitch(), autoReturn = NSSwitch(), login = NSSwitch(), lowPower = NSSwitch()
     private let returnSlider = NSSlider(value: 30, minValue: 5, maxValue: 120, target: nil, action: nil)
     private let returnValue = label("30 min", size: 11, weight: .medium, color: .secondaryLabelColor)
@@ -747,6 +749,7 @@ final class SettingsView: FlippedView {
         let entries: [(String, NSView, String?)] = [
             ("Sensor", sensor, nil), ("Units", units, nil), ("Menu bar", menuBar, nil), ("Spacing", spacing, "Menu bar item spacing"),
             ("Effects", effects, "Light, frost and motion. Reduce Motion and Reduce Transparency always apply."),
+            ("Slider", sliderStyle, "How the fan slider looks. Changing it never changes the fan."),
             ("Heat color", heat, "Tint the temperature by how hot it is"),
             ("Return to Auto", autoReturn, "Hand the fan back to macOS after a set time"),
             ("", returnSlider, nil),
@@ -759,7 +762,7 @@ final class SettingsView: FlippedView {
             if let control = control as? NSControl { control.target = self; control.action = #selector(changedControl(_:)) }
             rows.append((name, control)); addSubview(name); addSubview(control)
         }
-        for control in [sensor, units, menuBar, spacing, effects] { control.controlSize = .small; control.segmentDistribution = .fillEqually; control.font = Theme.font(11, .medium) }
+        for control in [sensor, units, menuBar, spacing, effects, sliderStyle] { control.controlSize = .small; control.segmentDistribution = .fillEqually; control.font = Theme.font(11, .medium) }
         for toggle in [heat, autoReturn, login, lowPower] { toggle.controlSize = .small }
         returnSlider.controlSize = .small; returnSlider.isContinuous = true
         returnSlider.setAccessibilityLabel("Return to Auto after")
@@ -792,6 +795,7 @@ final class SettingsView: FlippedView {
         menuBar.selectedSegment = MenuBarContent.allCases.firstIndex(of: prefs.menuBarContent) ?? 0
         spacing.selectedSegment = MenuBarSpacing.allCases.firstIndex(of: prefs.menuBarSpacing) ?? 0
         effects.selectedSegment = EffectsLevel.allCases.firstIndex(of: prefs.effects) ?? 0
+        sliderStyle.selectedSegment = SliderStyle.allCases.firstIndex(of: prefs.sliderStyle) ?? 0
         heat.state = prefs.heatColor ? .on : .off
         autoReturn.state = model.autoReturnEnabled ? .on : .off
         login.state = model.loginEnabled ? .on : .off
@@ -849,6 +853,8 @@ final class SettingsView: FlippedView {
             prefs.menuBarSpacing = MenuBarSpacing.allCases[max(0, spacing.selectedSegment)]
         } else if sender === effects {
             prefs.effects = EffectsLevel.allCases[max(0, effects.selectedSegment)]
+        } else if sender === sliderStyle {
+            prefs.sliderStyle = SliderStyle.allCases[max(0, sliderStyle.selectedSegment)]
         } else if sender === heat {
             prefs.heatColor = heat.state == .on
         } else if sender === autoReturn {

@@ -35,6 +35,23 @@ final class PresentationPreferencesTests: XCTestCase {
         XCTAssertFalse(reloaded.heatColor)
     }
 
+    /// The slider style is a persisted presentation choice: Channel by
+    /// default, Dot Grid kept as the original look.
+    func testSliderStyleDefaultsToChannelAndPersists() {
+        let center = NotificationCenter()
+        var notes = 0
+        let token = center.addObserver(forName: PresentationPreferences.didChange, object: nil, queue: nil) { _ in notes += 1 }
+        defer { center.removeObserver(token) }
+        let prefs = PresentationPreferences(defaults: defaults, center: center)
+        XCTAssertEqual(prefs.sliderStyle, .channel)
+        prefs.sliderStyle = .dotGrid; prefs.sliderStyle = .dotGrid
+        XCTAssertEqual(notes, 1)
+        XCTAssertEqual(PresentationPreferences(defaults: defaults, center: center).sliderStyle, .dotGrid)
+        defaults.set("velvet", forKey: PresentationPreferences.Key.sliderStyle)
+        XCTAssertEqual(PresentationPreferences(defaults: defaults, center: center).sliderStyle, .channel)
+        XCTAssertEqual(SliderStyle.allCases.map(\.title), ["Channel", "Dot Grid"])
+    }
+
     func testUnknownStoredValuesFallBackToDefaults() {
         defaults.set("sparkles", forKey: PresentationPreferences.Key.effects)
         defaults.set(3, forKey: PresentationPreferences.Key.menuBarContent)
@@ -89,6 +106,23 @@ final class PresentationPreferencesTests: XCTestCase {
         XCTAssertFalse(subtle.sweep); XCTAssertLessThan(subtle.glow, full.glow)
     }
 
+    /// Drag-speed reactions: full on Expressive, gentler on Subtle, none on
+    /// Off; Reduce Motion removes them at every level.
+    func testDragReactionsFollowEffectsLevel() {
+        let expressive = EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: false)
+        let subtle = EffectsProfile(level: .subtle, reduceMotion: false, reduceTransparency: false)
+        let off = EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false)
+        XCTAssertEqual(expressive.motion, 1); XCTAssertTrue(expressive.wake)
+        XCTAssertGreaterThan(subtle.motion, 0); XCTAssertLessThan(subtle.motion, expressive.motion); XCTAssertFalse(subtle.wake)
+        XCTAssertEqual(off.motion, 0); XCTAssertFalse(off.wake)
+        for level in EffectsLevel.allCases {
+            let reduced = EffectsProfile(level: level, reduceMotion: true, reduceTransparency: false)
+            XCTAssertEqual(reduced.motion, 0); XCTAssertFalse(reduced.wake)
+        }
+        XCTAssertEqual(EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: true).motion, 1,
+                       "Reduce Transparency dims light, not movement")
+    }
+
     func testSliderEnergyIncreasesProgressively() {
         XCTAssertEqual(SliderEnergy.level(percent: 0), 0)
         XCTAssertEqual(SliderEnergy.level(percent: 100), 1)
@@ -97,8 +131,138 @@ final class PresentationPreferencesTests: XCTestCase {
         let samples = stride(from: 0.0, through: 100, by: 5).map { SliderEnergy.level(percent: $0) }
         XCTAssertEqual(samples, samples.sorted())
         XCTAssertLessThan(SliderEnergy.level(percent: 50), 0.5, "Energy accelerates toward the top of the range")
+    }
+
+    func testCoolantCoolsFromMintThroughCyanToIce() {
+        for p in Array(stride(from: -10.0, through: 110, by: 2.5)) + [Double.nan, .infinity] {
+            let t = SliderEnergy.tone(percent: p)
+            XCTAssertEqual(t.low + t.mid + t.high, 1, accuracy: 1e-9, "\(p)")
+            XCTAssertTrue([t.low, t.mid, t.high].allSatisfy { (0...1).contains($0) }, "\(p)")
+        }
+        XCTAssertEqual(SliderEnergy.tone(percent: 0).low, 1)
+        XCTAssertEqual(SliderEnergy.tone(percent: 60).mid, 1, accuracy: 1e-9)
+        XCTAssertEqual(SliderEnergy.tone(percent: 100).high, 1)
+        // Warm hues never appear: the ramp only ever mixes the three ice tones,
+        // and ice only joins above cyan.
+        XCTAssertEqual(SliderEnergy.tone(percent: 59).high, 0)
+        let density = stride(from: 0.0, through: 100, by: 5).map { SliderEnergy.coolant(percent: $0) }
+        XCTAssertEqual(density, density.sorted())
+        XCTAssertGreaterThanOrEqual(density.first!, 0.45, "The floor is visibly filled, never empty")
+        XCTAssertLessThan(density.last!, 1, "Glass shows through even at full cooling")
+    }
+}
+
+final class SliderGeometryTests: XCTestCase {
+    func testChannelIsCentredAndTheThumbStaysInsideIt() {
+        let bounds = CGRect(x: 0, y: 0, width: 344, height: 34)
+        let channel = SliderGeometry.channel(in: bounds)
+        XCTAssertEqual(channel.height, SliderGeometry.channelHeight)
+        XCTAssertEqual(channel.minX, SliderGeometry.inset)
+        XCTAssertEqual(channel.maxX, bounds.width - SliderGeometry.inset)
+        XCTAssertEqual(channel.midY, bounds.midY, accuracy: 0.5)
+        XCTAssertEqual(SliderGeometry.x(percent: 0, width: 344) - SliderGeometry.thumb.width / 2, channel.minX)
+        XCTAssertEqual(SliderGeometry.x(percent: 100, width: 344) + SliderGeometry.thumb.width / 2, channel.maxX)
+        XCTAssertEqual(SliderGeometry.x(percent: -20, width: 344), SliderGeometry.x(percent: 0, width: 344))
+        XCTAssertEqual(SliderGeometry.x(percent: .nan, width: 344), SliderGeometry.x(percent: 0, width: 344))
+        // The thumb is taller than the channel, so it reads as a handle on it.
+        XCTAssertGreaterThan(SliderGeometry.thumb.height, SliderGeometry.channelHeight * 1.5)
+        XCTAssertLessThanOrEqual(SliderGeometry.thumb.height, bounds.height)
+    }
+
+    func testPointerMappingRoundTrips() {
+        for width in [120.0, 344, 512] as [CGFloat] {
+            for p in stride(from: 0.0, through: 100, by: 7) {
+                XCTAssertEqual(SliderGeometry.percent(atX: SliderGeometry.x(percent: p, width: width), width: width), p, accuracy: 1e-9)
+            }
+            XCTAssertLessThan(SliderGeometry.percent(atX: 0, width: width), 0, "Unclamped: the control applies the hardware floor")
+        }
+        XCTAssertGreaterThan(SliderGeometry.travel(width: 10), 0, "Degenerate widths never divide by zero")
+    }
+}
+
+final class DotGridGeometryTests: XCTestCase {
+    /// The restored style keeps the original lattice mapping exactly
+    /// (7bd4997: 3 pt pitch, 2 pt dots, centred, 16 pt ends).
+    func testLatticeMatchesTheOriginalControl() {
+        XCTAssertEqual(DotGridGeometry.columns(width: 372), 113)
+        let grid = DotGridGeometry.grid(width: 372, height: 34)
+        XCTAssertEqual(grid, CGRect(x: 17, y: 10, width: 338, height: 14))
+        XCTAssertEqual(DotGridGeometry.x(percent: 0, width: 372), 18)
+        XCTAssertEqual(DotGridGeometry.x(percent: 100, width: 372), 354)
+        XCTAssertEqual(DotGridGeometry.x(percent: 150, width: 372), 354)
+        XCTAssertEqual(DotGridGeometry.x(percent: .nan, width: 372), 18)
+        XCTAssertEqual(DotGridGeometry.thumb, CGSize(width: 6, height: 20))
+        for p in stride(from: 0.0, through: 100, by: 9) {
+            XCTAssertEqual(DotGridGeometry.percent(atX: DotGridGeometry.x(percent: p, width: 344), width: 344), p, accuracy: 1e-9)
+        }
+    }
+
+    func testStyleDispatchesGeometry() {
+        for p in [0.0, 21, 64, 100] {
+            XCTAssertEqual(SliderStyle.channel.x(percent: p, width: 344), SliderGeometry.x(percent: p, width: 344))
+            XCTAssertEqual(SliderStyle.dotGrid.x(percent: p, width: 344), DotGridGeometry.x(percent: p, width: 344))
+            for style in SliderStyle.allCases {
+                XCTAssertEqual(style.percent(atX: style.x(percent: p, width: 344), width: 344), p, accuracy: 1e-9)
+            }
+        }
+        XCTAssertNotEqual(SliderStyle.channel.x(percent: 0, width: 344), SliderStyle.dotGrid.x(percent: 0, width: 344),
+                          "Floor marks must follow the selected style")
+    }
+
+    func testDotSizeStaysWithinTheLattice() {
         XCTAssertLessThan(SliderEnergy.dotSize(percent: 0), SliderEnergy.dotSize(percent: 100))
         XCTAssertLessThanOrEqual(SliderEnergy.dotSize(percent: 100), 2.4)
+    }
+}
+
+final class SliderMotionTests: XCTestCase {
+    func testSmoothingFollowsElapsedTimeAndSurvivesBadSamples() {
+        var v = 0.0
+        for _ in 0..<40 { v = SliderMotion.smoothed(previous: v, sample: 900, interval: 1.0 / 120) }
+        XCTAssertEqual(v, 900, accuracy: 5, "Converges on a steady drag")
+        let oneLongStep = SliderMotion.smoothed(previous: 0, sample: 900, interval: 0.05)
+        var twoShort = 0.0
+        for _ in 0..<2 { twoShort = SliderMotion.smoothed(previous: twoShort, sample: 900, interval: 0.025) }
+        XCTAssertEqual(oneLongStep, twoShort, accuracy: 1e-9, "Event rate does not change the result")
+        XCTAssertEqual(SliderMotion.smoothed(previous: 300, sample: .nan, interval: 0.01), 300)
+        XCTAssertEqual(SliderMotion.smoothed(previous: .nan, sample: .nan, interval: 0.01), 0)
+        XCTAssertTrue(SliderMotion.smoothed(previous: 0, sample: 500, interval: 0).isFinite)
+        XCTAssertTrue(SliderMotion.smoothed(previous: 0, sample: 500, interval: -1).isFinite)
+    }
+
+    func testSpeedResponseHasADeadZoneAndSaturates() {
+        XCTAssertEqual(SliderMotion.intensity(velocity: 0), 0)
+        XCTAssertEqual(SliderMotion.intensity(velocity: 35), 0, "Slow, precise adjustment stays still")
+        XCTAssertEqual(SliderMotion.intensity(velocity: .infinity), 0)
+        XCTAssertEqual(SliderMotion.intensity(velocity: 400), SliderMotion.intensity(velocity: -400))
+        let ramp = stride(from: 0.0, through: 4000, by: 100).map { SliderMotion.intensity(velocity: $0) }
+        XCTAssertEqual(ramp, ramp.sorted())
+        XCTAssertLessThanOrEqual(ramp.last!, 1)
+        XCTAssertGreaterThan(SliderMotion.intensity(velocity: 1500), 0.9)
+    }
+
+    func testThumbLeansWithTravelWithinBounds() {
+        XCTAssertGreaterThan(SliderMotion.lean(velocity: 800, gain: 1), 0)
+        XCTAssertLessThan(SliderMotion.lean(velocity: -800, gain: 1), 0)
+        XCTAssertEqual(SliderMotion.lean(velocity: 800, gain: 1), -SliderMotion.lean(velocity: -800, gain: 1))
+        XCTAssertEqual(SliderMotion.lean(velocity: 10, gain: 1), 0)
+        XCTAssertEqual(SliderMotion.lean(velocity: 800, gain: 0), 0)
+        XCTAssertLessThanOrEqual(abs(SliderMotion.lean(velocity: 1e9, gain: 5)), SliderMotion.maxLean)
+        XCTAssertLessThan(SliderMotion.lean(velocity: 800, gain: 0.45), SliderMotion.lean(velocity: 800, gain: 1))
+        XCTAssertLessThanOrEqual(SliderMotion.stretch(velocity: 1e9, gain: 1), 0.35)
+        XCTAssertLessThanOrEqual(SliderMotion.surge(velocity: 1e9, gain: 1), 0.9)
+        XCTAssertEqual(SliderMotion.stretch(velocity: 800, gain: .nan), 0)
+    }
+
+    func testWakeGrowsWithSpeedAndCoolingEnergy() {
+        XCTAssertEqual(SliderMotion.wake(velocity: 20, energy: 1).opacity, 0)
+        let slow = SliderMotion.wake(velocity: 300, energy: 0.5), fast = SliderMotion.wake(velocity: 1500, energy: 0.5)
+        XCTAssertGreaterThan(fast.length, slow.length)
+        XCTAssertGreaterThan(fast.opacity, slow.opacity)
+        XCTAssertGreaterThan(SliderMotion.wake(velocity: 900, energy: 1).opacity, SliderMotion.wake(velocity: 900, energy: 0).opacity)
+        let extreme = SliderMotion.wake(velocity: -1e9, energy: 9)
+        XCTAssertLessThanOrEqual(extreme.opacity, 1)
+        XCTAssertLessThanOrEqual(extreme.length, 88)
     }
 }
 
@@ -116,6 +280,10 @@ final class FrostAndArtworkTests: XCTestCase {
     func testFrostFollowsEffectsLevelAndSystemSettings() {
         let expressive = EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: false)
         XCTAssertEqual(expressive.frost, 1); XCTAssertTrue(expressive.forms)
+        let crystals = stride(from: 60.0, through: 100, by: 2.5).map { Frost.crystal(percent: $0) }
+        XCTAssertEqual(crystals, crystals.sorted())
+        XCTAssertEqual(Frost.crystal(percent: Frost.crystalOnset), 0); XCTAssertEqual(Frost.crystal(percent: 100), 1)
+        XCTAssertGreaterThan(Frost.crystalOnset, Frost.onset, "Rime comes first; the sheet forms only near the top")
         let subtle = EffectsProfile(level: .subtle, reduceMotion: false, reduceTransparency: false)
         XCTAssertGreaterThan(subtle.frost, 0); XCTAssertFalse(subtle.forms)
         XCTAssertEqual(EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false).frost, 0)

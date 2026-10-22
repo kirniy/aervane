@@ -36,17 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         panel = MenuPanel(contentRect: .init(x: 0, y: 0, width: PanelView.width, height: 300), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.acceptsMouseMovedEvents = true
+        panel.animationBehavior = .none
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true; panel.level = .popUpMenu; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.isMovable = false; panel.hidesOnDeactivate = false
-        // The content view draws no backing of its own, so the system
-        // material is what shows through everywhere.
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: content.bounds); glass.cornerRadius = 24; glass.style = .regular; glass.contentView = content; panel.contentView = glass
-            self.glass = glass
-        } else {
-            let glass = NSVisualEffectView(frame: content.bounds); glass.material = .popover; glass.blendingMode = .behindWindow; glass.state = .active; glass.wantsLayer = true; glass.layer?.cornerRadius = 20; glass.layer?.masksToBounds = true; glass.addSubview(content); panel.contentView = glass
-            self.glass = glass
-        }
-        content.autoresizingMask = [.width, .height]
+        let surface = PanelSurface(content: content)
+        panel.contentView = surface
+        glass = surface.material
         // Escape peels one layer (an open preset editor cancels) before closing.
         panel.escape = { [weak self] in guard let self, !self.content.dismissTopLayer() else { return }; self.hide() }
         panel.initialFirstResponder = content.preferredFirstResponder
@@ -126,18 +120,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func show() {
         guard !panel.isVisible else { return }
         model.panelVisible = true; content.update(); positionPanel()
+        panel.contentView?.layoutSubtreeIfNeeded()
+        item.button?.highlight(true)
         NSApp.activate()
         panel.alphaValue = Theme.reduceMotion ? 1 : 0; panel.makeKeyAndOrderFront(nil)
+        panel.invalidateShadow()
         panel.makeFirstResponder(content.preferredFirstResponder)
         content.playEntrance()
-        if !Theme.reduceMotion { NSAnimationContext.runAnimationGroup { $0.duration = 0.16; $0.timingFunction = CAMediaTimingFunction(name: .easeOut); panel.animator().alphaValue = 1 } }
+        if !Theme.reduceMotion {
+            NSAnimationContext.runAnimationGroup({
+                $0.duration = 0.16; $0.timingFunction = Theme.Ease.out
+                panel.animator().alphaValue = 1
+            }, completionHandler: { [weak self] in self?.panel.invalidateShadow() })
+        }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, !self.isPointerOverStatusItem() else { return }; self.hide()
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             if let self, event.window != self.panel, !self.content.isTrackingMenu, !self.isPointerOverStatusItem() { self.hide() }; return event
         }
-        item.button?.highlight(true)
     }
     private func isPointerOverStatusItem() -> Bool {
         guard let button = item.button, let window = button.window else { return false }
@@ -153,13 +154,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = item.button, let window = button.window else { return }
         let rect = window.convertToScreen(button.convert(button.bounds, to: nil)), screen = window.screen ?? NSScreen.main!
         let x = min(max(screen.visibleFrame.minX + 8, rect.midX - panel.frame.width / 2), screen.visibleFrame.maxX - panel.frame.width - 8)
-        panel.setFrameOrigin(.init(x: x, y: max(screen.visibleFrame.minY + 8, rect.minY - panel.frame.height - 7)))
+        // Keep the panel close to its highlighted trigger. Align the surface
+        // to device pixels so its edge stays crisp on both 1× and 2× screens.
+        let y = max(screen.visibleFrame.minY + 8, rect.minY - panel.frame.height - 2)
+        let scale = screen.backingScaleFactor
+        panel.setFrameOrigin(.init(x: (x * scale).rounded() / scale, y: (y * scale).rounded() / scale))
     }
     private func resize(_ height: CGFloat) {
         guard abs(panel.frame.height - height) > 1 else { return }
         var frame = panel.frame; frame.origin.y += frame.height - height; frame.size.height = height
-        if panel.isVisible && !Theme.reduceMotion { NSAnimationContext.runAnimationGroup { $0.duration = 0.18; $0.timingFunction = CAMediaTimingFunction(name: .easeOut); panel.animator().setFrame(frame, display: true) } }
-        else { panel.setFrame(frame, display: false) }
+        if panel.isVisible && !Theme.reduceMotion {
+            NSAnimationContext.runAnimationGroup({
+                $0.duration = 0.18; $0.timingFunction = Theme.Ease.out
+                panel.animator().setFrame(frame, display: true)
+            }, completionHandler: { [weak self] in self?.panel.invalidateShadow() })
+        } else { panel.setFrame(frame, display: false); panel.invalidateShadow() }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // A command in flight may be taking control right now, so it also

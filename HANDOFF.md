@@ -22,7 +22,7 @@ The UI now has progressive slider effects and ice forming at maximum cooling, te
 
 ## What is now verified
 
-- 134 tests pass on the actual Mac with Xcode 26.2. Production app/helper build and pass strict code-signature verification with the existing Apple development identity.
+- 153 tests pass on the actual Mac with Xcode 26.2. Production app/helper now build with a Developer ID Application identity and secure timestamps, and pass strict code-signature verification.
 - The signed development archive also passes strict signature verification after extraction. CI builds an ad hoc archive for verification but no longer uploads test-build artifacts, following the user’s cleanup request.
 - Installed signed helper approval and authenticated XPC work.
 - Real 100% → Auto test: independent SMC read saw `F0Md=1`, `F0Tg=4900`; fan reached about 4900 RPM. Auto then read `F0Md=0`; firmware subsequently returned to about 1000 RPM. Initial hottest CPU sample was 98.8°C.
@@ -39,7 +39,9 @@ The UI now has progressive slider effects and ice forming at maximum cooling, te
 
 ## Additional UI pass
 
-Claude session `fc286b32-0b17-4836-89ac-39873fc37759` added inspectable temperature history, a draft-based preset editor, keyboard quick actions, native preset context menus and revised frost formation/melt. The patch compiles on this Mac with 134 passing tests. Signed version 0.2.0 is installed and actual manual control was independently verified. Full interaction verification is still in progress, and the user requests a further, more expressive slider pass before the public release.
+Claude session `fc286b32-0b17-4836-89ac-39873fc37759` added inspectable temperature history, a draft-based preset editor, keyboard quick actions, native preset context menus and revised frost formation/melt. The patch compiles on this Mac with 134 passing tests. Signed version 0.2.0 is installed and actual manual control was independently verified. Live checks verified the temperature inspector, ⌘, settings shortcut, draft typing without fan shortcut interception, Escape cancellation, Return saving and the preset context menu. Claude session `5607838c-35a8-4f9d-9d16-b0e88e4fabf9` completed the expressive Cooling Channel and the user-requested style switch. Both are integrated. `PercentSlider` owns the shared input/commit path; `ChannelSkin` and `DotGridSkin` only render. Settings → Slider persists Channel or Dot Grid, independently of Effects. Parent fixed main-actor annotations in the extracted drawing helpers; 153 Mac tests pass. Real Channel→Dot Grid switching at 76% retained target 3724 RPM, and actual screenshots show both styles.
+
+The parent added `PanelSurface.swift` to clip glass, aura and content to one continuous rounded silhouette, refreshed the native window shadow after show/resize, and reduced the menu-bar gap to two points. The Developer ID-signed update is installed; the window capture has clean clipped corners. The user separately confirmed that the outer rectangular outline is gone. Actual manual 74% was independently verified after replacement; the user explicitly requests **Manual 76% with Return to Auto off when all work is finished**.
 
 ## Sensor and key catalog
 
@@ -51,8 +53,8 @@ See [the complete embedded compatibility catalog](docs/compatibility/mfc-1.5.21/
 
 | Area | Files |
 | --- | --- |
-| Menu bar, panel lifecycle | `Sources/Zephyr/main.swift` |
-| Native UI | `Sources/Zephyr/{PanelView,PercentSlider,Theme}.swift` |
+| Menu bar, panel lifecycle | `Sources/Zephyr/{main,PanelSurface}.swift` |
+| Native UI | `Sources/Zephyr/{PanelView,PercentSlider,SliderSkin,ChannelSkin,DotGridSkin,Theme}.swift` |
 | Presentation preferences and pure visual rules | `Sources/Zephyr/PresentationPreferences.swift` |
 | Model/helper communication | `Sources/Zephyr/{AppModel,HelperClient,HelperInstaller}.swift` |
 | Hardware read/write | `Sources/SMC`, `Sources/SMCClient` |
@@ -79,10 +81,12 @@ Set `SIGN_IDENTITY` for an Apple-signed helper build. The installed app is `/App
 
 The next version is `0.2.0`, held in `VERSION`; `tools/build.sh` uses it for the bundle version. Distribution is **Homebrew only**, following the user's latest instruction. The abandoned npm prototype remains in commit `446b10b` if ever needed; do not restart npm signup or publishing.
 
-`tools/prepare-distribution.py` generates a versioned archive, metadata and cask only after verifying Developer ID signatures for app/helper, architecture, Gatekeeper and the stapled ticket. A real development-signed archive was rejected as intended. The public `kirniy/homebrew-tap` exists, `brew tap kirniy/tap` works, and the rendered cask passes `brew style`. No installable cask has been published yet. The owner has signed into Apple Developer in the in-app browser; paid Individual membership and team EEECDXYX82 are verified. No Developer ID certificate is installed yet. The currently installed development certificate is not suitable for notarization. Do not describe the prospective install command as working until publication and fresh installation are checked.
+`tools/prepare-distribution.py` generates a versioned archive, metadata and cask only after checking Developer ID signatures, arm64 architecture, Gatekeeper and a stapled ticket. Final version 0.2.0 is signed and accepted by Apple (submission `f68f7cab-e535-4d76-b5e5-e0afe2307797`), stapled and verified after extraction. Archive SHA-256: `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`. The local `aervane-notary` Keychain profile holds the credentials; no private keys are in source control or on Claude's host. The user's original Developer ID/API creation approvals have already been fulfilled.
+
+Release assets and the generated cask are ready for GitHub publication and a fresh Homebrew install. Preserve immutable release assets once published; corrections need a new version.
 
 - Physical pointer drag, repeated actual status-item clicks, outside dismissal, rapid toggles and multiple monitors. Native handler regression tests and keyboard/accessibility paths pass; app-scoped CUA reports `AXError.notImplemented` for pointer drag/click on the custom slider. Do not claim a physical drag test.
 - Real VoiceOver, Reduce Motion/Transparency, light theme, 1× screens and long-content states.
 - Physical helper/app crash, sleep/wake and expired-lease scenarios beyond the controlled normal restoration tests.
 - More Mac models, multiple fans and Intel/alternate mode-key support.
-- Public Developer ID signing, notarization, release install and registry publication. The current identity is development-only; `Casks/aervane.rb.in` remains a template until the preparation checks succeed.
+- Fresh public-release installation through Homebrew. Signing, notarization, stapling and generation of the real checksum/cask are complete.

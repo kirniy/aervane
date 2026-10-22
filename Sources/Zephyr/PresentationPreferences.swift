@@ -34,6 +34,25 @@ enum EffectsLevel: String, CaseIterable {
     }
 }
 
+/// How the cooling slider is drawn. Presentation only: both styles are the
+/// same control with the same values, hardware floor, measured mark, input
+/// and commits. Choosing one never sends anything to the fan.
+enum SliderStyle: String, CaseIterable {
+    /// A coolant channel with a glass thumb (default).
+    case channel
+    /// The original lattice of dots with a slim white handle.
+    case dotGrid
+    var title: String { self == .channel ? "Channel" : "Dot Grid" }
+    /// Thumb centre for a value in a slider of the given width.
+    func x(percent: Double, width: CGFloat) -> CGFloat {
+        self == .channel ? SliderGeometry.x(percent: percent, width: width) : DotGridGeometry.x(percent: percent, width: width)
+    }
+    /// Value under a point (unclamped; the control applies its floor).
+    func percent(atX x: CGFloat, width: CGFloat) -> Double {
+        self == .channel ? SliderGeometry.percent(atX: x, width: width) : DotGridGeometry.percent(atX: x, width: width)
+    }
+}
+
 /// What the interface may draw and animate right now. The user's level sets
 /// the ceiling; Reduce Motion and Reduce Transparency always lower it.
 struct EffectsProfile: Equatable {
@@ -47,26 +66,33 @@ struct EffectsProfile: Equatable {
     let rolls: Bool
     /// Light sweep that acknowledges a pointer release.
     let sweep: Bool
-    /// One-shot bloom when a user action reaches 100%.
+    /// One-shot crystal burst when a user action reaches 100%.
     let bloom: Bool
     /// Static frost artwork intensity on the cooling slider, 0...1.
     let frost: Double
     /// The authored ice-formation reveal at maximum cooling. Without it the
     /// ice simply appears (Subtle) or is absent (Off).
     let forms: Bool
+    /// How strongly the slider answers drag speed (thumb lean and stretch,
+    /// energy surge), 0...1. Zero with Reduce Motion.
+    let motion: Double
+    /// Speed wake behind a moving thumb and ripples on grab, release and
+    /// preset detents. Expressive only.
+    let wake: Bool
 
     init(level: EffectsLevel, reduceMotion: Bool, reduceTransparency: Bool) {
         let light: Double = reduceTransparency ? 0.5 : 1
         switch level {
-        case .off: glow = 0; aura = 0; frost = 0
-        case .subtle: glow = 0.55 * light; aura = 0.6 * light; frost = 0.6 * light
-        case .expressive: glow = 1 * light; aura = 1 * light; frost = 1 * light
+        case .off: glow = 0; aura = 0; frost = 0; motion = 0
+        case .subtle: glow = 0.55 * light; aura = 0.6 * light; frost = 0.6 * light; motion = reduceMotion ? 0 : 0.45
+        case .expressive: glow = 1 * light; aura = 1 * light; frost = 1 * light; motion = reduceMotion ? 0 : 1
         }
         animates = !reduceMotion
         rolls = !reduceMotion && level != .off
         sweep = !reduceMotion && level == .expressive
         bloom = !reduceMotion && level != .off
         forms = !reduceMotion && level == .expressive
+        wake = !reduceMotion && level == .expressive
     }
 }
 
@@ -113,6 +139,7 @@ final class PresentationPreferences {
         static let menuBarSpacing = "presentation.menuBarSpacing"
         static let effects = "presentation.effects"
         static let heatColor = "presentation.heatColor"
+        static let sliderStyle = "presentation.sliderStyle"
     }
 
     private let defaults: UserDefaults
@@ -123,6 +150,8 @@ final class PresentationPreferences {
     var effects: EffectsLevel { didSet { store(effects.rawValue, Key.effects, changed: effects != oldValue) } }
     /// Colours the temperature (panel and menu bar) by thermal band.
     var heatColor: Bool { didSet { store(heatColor, Key.heatColor, changed: heatColor != oldValue) } }
+    /// How the cooling slider is drawn.
+    var sliderStyle: SliderStyle { didSet { store(sliderStyle.rawValue, Key.sliderStyle, changed: sliderStyle != oldValue) } }
 
     init(defaults: UserDefaults = .standard, center: NotificationCenter = .default) {
         self.defaults = defaults; self.center = center
@@ -130,6 +159,7 @@ final class PresentationPreferences {
         menuBarSpacing = defaults.string(forKey: Key.menuBarSpacing).flatMap(MenuBarSpacing.init(rawValue:)) ?? .compact
         effects = defaults.string(forKey: Key.effects).flatMap(EffectsLevel.init(rawValue:)) ?? .expressive
         heatColor = defaults.object(forKey: Key.heatColor) as? Bool ?? true
+        sliderStyle = defaults.string(forKey: Key.sliderStyle).flatMap(SliderStyle.init(rawValue:)) ?? .channel
     }
 
     private func store(_ value: Any, _ key: String, changed: Bool) {
@@ -158,20 +188,125 @@ enum StatusItemLayout {
     }
 }
 
-/// How much "energy" the slider shows at a value: light, dot density, glow
-/// and head length all scale from this one curve, so effects intensify
-/// progressively and consistently with speed.
+/// How much "energy" the slider shows at a value: coolant brightness,
+/// streamline density, head length and glow all scale from this one curve,
+/// so effects intensify progressively and consistently with speed.
 enum SliderEnergy {
     static func level(percent: Double) -> Double {
         guard percent.isFinite else { return 0 }
         return pow(max(0, min(1, percent / 100)), 1.6)
     }
-    /// Lit dot diameter for a column at `percent` (resting dots are 2 pt).
+    /// Lit dot diameter for a column at `percent` (Dot Grid; resting dots are 2 pt).
     static func dotSize(percent: Double) -> Double { 1.7 + 0.7 * level(percent: percent) }
+    /// Coolant colour at a value as weights of the three ice tones (mint,
+    /// glacier cyan, ice white). The weights sum to 1; the ramp reaches cyan
+    /// at 60% and ice at 100%.
+    static func tone(percent: Double) -> (low: Double, mid: Double, high: Double) {
+        let t = percent.isFinite ? max(0, min(1, percent / 100)) : 0
+        if t < 0.6 { let f = t / 0.6; return (1 - f, f, 0) }
+        let f = (t - 0.6) / 0.4
+        return (0, 1 - f, f)
+    }
+    /// Coolant opacity: thin at the firmware floor, dense at full cooling.
+    static func coolant(percent: Double) -> Double { 0.5 + 0.46 * pow(percent.isFinite ? max(0, min(1, percent / 100)) : 0, 0.9) }
+}
+
+/// Where things sit on the cooling slider. Pure geometry, so the owner can
+/// align the floor mark before layout and the mapping is testable.
+enum SliderGeometry {
+    /// Room at both ends for the halo, ripples and rim crystals.
+    static let inset: CGFloat = 16
+    /// The recessed channel the coolant runs in.
+    static let channelHeight: CGFloat = 12
+    static let thumb = CGSize(width: 12, height: 24)
+
+    static func channel(in bounds: CGRect) -> CGRect {
+        CGRect(x: bounds.minX + inset, y: bounds.minY + ((bounds.height - channelHeight) / 2).rounded(.down),
+               width: max(0, bounds.width - 2 * inset), height: channelHeight)
+    }
+    /// Thumb centre for a value. The thumb stays inside the channel at both
+    /// ends, so 0% and 100% are where its edges meet the channel caps.
+    static func x(percent: Double, width: CGFloat) -> CGFloat {
+        let t = percent.isFinite ? max(0, min(1, percent / 100)) : 0
+        return inset + thumb.width / 2 + CGFloat(t) * travel(width: width)
+    }
+    /// Value under a point (unclamped; the control applies its floor).
+    static func percent(atX x: CGFloat, width: CGFloat) -> Double {
+        Double((x - inset - thumb.width / 2) / travel(width: width)) * 100
+    }
+    static func travel(width: CGFloat) -> CGFloat { max(1, width - 2 * inset - thumb.width) }
+}
+
+/// The original dot-grid slider's geometry: five rows of 2 pt dots on a 3 pt
+/// pitch, centred in the control with 16 pt of room at both ends. The thumb
+/// centre sits on a column centre at 0% and 100%.
+enum DotGridGeometry {
+    static let dot: CGFloat = 2, pitch: CGFloat = 3, rows = 5
+    static let inset: CGFloat = 16
+    static let thumb = CGSize(width: 6, height: 20)
+
+    static func columns(width: CGFloat) -> Int { max(2, Int(((width - 2 * inset - dot) / pitch).rounded(.down)) + 1) }
+    /// The lattice inside bounds at the origin (as the control lays it out).
+    static func grid(width: CGFloat, height: CGFloat) -> CGRect {
+        let w = CGFloat(columns(width: width) - 1) * pitch + dot
+        let h = CGFloat(rows - 1) * pitch + dot
+        return CGRect(x: ((width - w) / 2).rounded(.down), y: ((height - h) / 2).rounded(.down), width: w, height: h)
+    }
+    static func x(percent: Double, width: CGFloat) -> CGFloat {
+        let grid = grid(width: width, height: 1), t = percent.isFinite ? max(0, min(100, percent)) / 100 : 0
+        return grid.minX + dot / 2 + CGFloat(t) * (grid.width - dot)
+    }
+    static func percent(atX x: CGFloat, width: CGFloat) -> Double {
+        let grid = grid(width: width, height: 1)
+        return Double((x - grid.minX - dot / 2) / max(1, grid.width - dot)) * 100
+    }
+}
+
+/// How the slider answers the speed of a drag, in points per second of
+/// thumb travel. Every curve is bounded and has a dead zone, so a fast
+/// sweep reads as momentum while a slow, precise adjustment stays still.
+enum SliderMotion {
+    /// Exponential smoothing of raw per-event velocity. Event spacing varies
+    /// (60–120 Hz, coalesced), so the weight follows the elapsed time.
+    static func smoothed(previous: Double, sample: Double, interval: Double, timeConstant: Double = 0.05) -> Double {
+        let previous = previous.isFinite ? previous : 0
+        guard sample.isFinite else { return previous }
+        let dt = interval.isFinite && interval > 0 ? min(interval, 0.25) : 1.0 / 60
+        return previous + (sample - previous) * (1 - exp(-dt / timeConstant))
+    }
+    /// Perceived speed, 0...1: nothing below 40 pt/s, saturating near 1500.
+    static func intensity(velocity: Double) -> Double {
+        guard velocity.isFinite else { return 0 }
+        return 1 - exp(-max(0, abs(velocity) - 40) / 520)
+    }
+    /// Thumb lean in radians; the top leads the travel. At most 8°.
+    static let maxLean = 0.14
+    static func lean(velocity: Double, gain: Double) -> Double {
+        guard velocity.isFinite, gain.isFinite else { return 0 }
+        return (velocity < 0 ? -1 : 1) * maxLean * intensity(velocity: velocity) * max(0, min(1, gain))
+    }
+    /// Extra horizontal scale of the thumb at speed, 0...0.35.
+    static func stretch(velocity: Double, gain: Double) -> Double {
+        guard gain.isFinite else { return 0 }
+        return 0.35 * intensity(velocity: velocity) * max(0, min(1, gain))
+    }
+    /// Extra length of the energy head at speed (added to its scale), 0...0.9.
+    static func surge(velocity: Double, gain: Double) -> Double {
+        guard gain.isFinite else { return 0 }
+        return 0.9 * intensity(velocity: velocity) * max(0, min(1, gain))
+    }
+    /// The cold wake left behind a moving thumb: trail length in points and
+    /// peak opacity. Hotter coolant leaves a brighter wake.
+    static func wake(velocity: Double, energy: Double) -> (length: Double, opacity: Double) {
+        let i = intensity(velocity: velocity)
+        guard i > 0.03 else { return (0, 0) }
+        let e = energy.isFinite ? max(0, min(1, energy)) : 0
+        return (12 + 76 * i, min(1, 1.2 * i * (0.45 + 0.55 * e)))
+    }
 }
 
 /// Frost grows with cooling power. It starts at a moderate speed, thickens
-/// toward the top, and becomes a formed ice crown only at full cooling.
+/// toward the top, and becomes a formed sheet of ice only at full cooling.
 enum Frost {
     static let onset = 45.0
     /// Visible frost amount for a slider value, 0...1 (smoothstep).
@@ -180,9 +315,9 @@ enum Frost {
         let t = max(0, min(1, (percent - onset) / (100 - onset)))
         return t * t * (3 - 2 * t)
     }
-    /// The crown is a state, not a gradient: it exists only at maximum.
+    /// The sheet is a state, not a gradient: it exists only at maximum.
     static func crowned(percent: Double) -> Bool { percent >= 99.5 }
-    /// Where the crown crystallises the lattice: the top of the range only,
+    /// Where the sheet freezes the channel: the top of the range only,
     /// strongest at the thumb (0 below `crystalOnset`, 1 at 100%).
     static let crystalOnset = 70.0
     static func crystal(percent: Double) -> Double {
@@ -190,7 +325,7 @@ enum Frost {
         let t = max(0, min(1, (percent - crystalOnset) / (100 - crystalOnset)))
         return t * t * (3 - 2 * t)
     }
-    /// Hoarfrost grains clinging to one edge of a column. Restrained: never
+    /// Rime grains clinging outside one lip at a point. Restrained: never
     /// more than four, so the track stays legible as an instrument.
     static func grains(amount: Double, noise: Double) -> Int {
         guard amount.isFinite, amount > 0.02 else { return 0 }

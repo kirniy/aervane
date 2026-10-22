@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-23T02:00:00+04:00",
+  "generatedAt": "2026-10-23T12:00:00+04:00",
   "title": "Design System: Aervane",
   "extensions": {
     "colorMeta": {
@@ -78,8 +78,8 @@
     "shadows": [
       {
         "name": "slider-thumb",
-        "value": "0 0 1.5pt rgba(0,0,0,0.45)",
-        "purpose": "Legibility for the white slider thumb on dark glass."
+        "value": "0 1pt 3pt rgba(0,0,0,0.55) dark / rgba(0,0,0,0.30) light, baked into the cached thumb bitmap",
+        "purpose": "The glass puck is the one raised object on the recessed coolant channel."
       },
       {
         "name": "panel-native",
@@ -101,7 +101,7 @@
       {
         "name": "glide",
         "value": "200ms cubic-bezier(0.23,1,0.32,1)",
-        "purpose": "Thumb, fill, frost reveal and halo for pointer jumps, preset clicks and model changes. Keyboard (arrows, 1-6, M) is instant."
+        "purpose": "Thumb, coolant, rime reveal and halo for pointer jumps, preset clicks and model changes. Keyboard (arrows, 1-6, M) is instant."
       },
       {
         "name": "mode-pill",
@@ -110,18 +110,48 @@
       },
       {
         "name": "ice-formation",
-        "value": "620ms freezing front from the thumb to the crystal onset, one glint riding it",
-        "purpose": "A user reaching 100% cooling crystallises the top of the lattice (Expressive only)."
+        "value": "620ms freezing front from the thumb to 70%, rim crystals grow, glint rides it; glint returns and frosts the thumb with a needle burst (1.25s total)",
+        "purpose": "A user reaching 100% cooling freezes the top of the channel into a sheet (Expressive only)."
       },
       {
         "name": "melt",
-        "value": "280ms ease-in-out fade from wherever the front is",
-        "purpose": "Crystals melt when cooling is lowered; an interrupted formation never snaps to full."
+        "value": "420ms ease-in-out from wherever the front is; plates fade, rim crystals retract",
+        "purpose": "Ice melts when cooling is lowered; an interrupted formation never snaps to full."
       },
       {
         "name": "release-sweep",
         "value": "550ms",
-        "purpose": "Light runs back along the lit dots after a pointer release."
+        "purpose": "Light runs back along the coolant after a pointer release."
+      },
+      {
+        "name": "thumb-grab",
+        "value": "260ms keyframe squash to 1.26×0.88, then held 1.12×1.06; release spring (stiffness 380, damping 13)",
+        "purpose": "The glass puck answers grab and release."
+      },
+      {
+        "name": "drag-speed",
+        "value": "additive lean (max 8°, spring 240/11), stretch (max +35%, 380ms), head surge, coolant slosh; 40 pt/s dead zone",
+        "purpose": "Momentum from fast drags; slow precise adjustment stays still. Expressive full, Subtle 45%, Off none."
+      },
+      {
+        "name": "wake",
+        "value": "420ms fade and retract into the thumb; preset/track glide shoots light to the target",
+        "purpose": "A short cold wake from actual movement (Expressive)."
+      },
+      {
+        "name": "ripple",
+        "value": "440ms ring along the channel (620ms wide on release)",
+        "purpose": "Grab, release and preset detents (Expressive)."
+      },
+      {
+        "name": "rime-melt",
+        "value": "500ms ease-in-out",
+        "purpose": "Rime lowered by a drag melts back behind the thumb; the coolant never lags."
+      },
+      {
+        "name": "slider-style-switch",
+        "value": "instant; transients settled, static state (including formed ice) redrawn",
+        "purpose": "Settings → Slider swaps Channel and Dot Grid skins without touching the value or the fan."
       },
       {
         "name": "temperature-roll",
@@ -172,7 +202,7 @@
   },
   "narrative": {
     "northStar": "The Native Instrument",
-    "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads; direct percentage control follows. Layout and controls carry state with minimal copy. Point of view: warm light behind the glass, frost on it — heat glows behind the reading, measured airflow chills the lower edge, the cooling command frosts the slider.",
+    "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads; direct percentage control follows. Layout and controls carry state with minimal copy. Point of view: warm light behind the glass, frost on it — heat glows behind the reading, measured airflow chills the lower edge, the cooling command runs as coolant light through a channel in the glass, grows rime and freezes into sheet ice at full cooling.",
     "keyCharacteristics": [
       "Native AppKit glass",
       "Heat behind the glass, frost on it",
@@ -212,14 +242,15 @@
       "Preserve the hardware minimum and distinguish requested from measured speed.",
       "Keep presets and settings inline.",
       "Let every core action work from the keyboard without capturing text-field keys.",
-      "Edit presets on a draft: Save stores, Cancel discards, closing the panel keeps edits."
+      "Edit presets on a draft: Save stores, Cancel discards, closing the panel keeps edits.",
+      "Keep slider styles presentation-only: one control, one input path, one set of fan semantics."
     ],
     "donts": [
       "Do not add taglines, footers or section labels.",
       "Do not describe preview as applied.",
       "Do not add idle animation, timers or particles.",
       "Do not let a heat state imply that manual control is blocked.",
-      "Do not use literal snowflakes or decorative glow; frost is grain and crystal on the lattice."
+      "Do not use literal snowflakes or falling snow; frost is grain, crystal and sheet ice on the slider channel."
     ]
   }
 }

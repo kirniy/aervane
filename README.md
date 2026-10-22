@@ -11,16 +11,32 @@
 
 A native Mac menu-bar utility with CPU temperature at a glance, direct percentage-based fan control, and editable presets in one glass panel. Built with Swift, AppKit, and a small C bridge to AppleSMC. No embedded browser, runtime packages, telemetry, or background network requests.
 
-**Development preview.** The installed signed helper, real 100% and 60% fan changes, and optional timed return to Auto have been verified on an M4 Mac mini. 113 automated tests cover control, recovery, sensors, native interactions and presentation settings. High temperature alone does not block manual control. Additional hardware and interaction validation remains; there is no production release or working Homebrew cask yet.
+### Install
+
+```sh
+brew install --cask kirniy/tap/aervane
+```
+
+Apple Silicon · macOS 14+ · Developer ID signed and notarized. Open Aervane from Applications. On the first fan adjustment, macOS asks you to approve its embedded helper. Temperature monitoring works before setup.
+
+Fan control is physically verified on the **M4 Mac mini (Mac16,10)**. Other models remain unverified; this release supports one fan. High temperature alone does not block manual control.
 
 <p align="center">
   <img src="docs/assets/menu-bar-preview.png" alt="Aervane running on macOS: temperature, manual 100% cooling, an icy slider, and inline presets" width="344">
 </p>
 <p align="center"><sub>Actual installed app at 100% cooling.</sub></p>
 
-- A compact glass panel, with heat-colored readings and progressively icy cooling controls.
-- Adjustable menu-bar content, spacing and effects. Animation responds to interaction; nothing loops while idle.
+- A compact glass panel, heat-colored readings, and your choice of Cooling Channel or Dot Grid sliders. Cooling effects grow with speed and freeze into ice at maximum.
+- Adjustable menu-bar content, spacing, slider style and effects. Animation responds to interaction; nothing loops while idle.
+- Editable presets, temperature-history inspection, and keyboard controls.
 - Manual control without a time limit by default. An optional 5–120 minute timer lives in Settings.
+
+<details>
+<summary>Original Dot Grid style</summary>
+<p align="center">
+  <img src="docs/assets/dot-grid-preview.png" alt="The original Dot Grid slider at 100%, selectable in Settings" width="344">
+</p>
+</details>
 
 <details>
 <summary>Settings</summary>
@@ -55,7 +71,7 @@ For a development-signed build, set `SIGN_IDENTITY` to an identity from `securit
 
 Start with [HANDOFF.md](HANDOFF.md) for current work, acceptance criteria, and validation gaps. [PRODUCT.md](PRODUCT.md) captures the brief; [DESIGN.md](DESIGN.md) records the native design system. See [hardware findings](docs/reverse-engineering.md), [model/key catalog](docs/compatibility/mfc-1.5.21/README.md), [verification](docs/verification.md), and [resource measurements](docs/performance.md).
 
-The [Homebrew tap](https://github.com/kirniy/homebrew-tap) is ready. Public installation is waiting on Developer ID signing and notarization. The [distribution runbook](docs/distribution.md) describes archive verification and publication; the cask and checksum are generated from the same signed release.
+Update with `brew upgrade --cask kirniy/tap/aervane`. The app does not poll for updates. The [Homebrew tap](https://github.com/kirniy/homebrew-tap) pins each release checksum; the [distribution runbook](docs/distribution.md) documents signing, notarization and publication.
 
 ### License
 
