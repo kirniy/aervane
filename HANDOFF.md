@@ -83,10 +83,12 @@ The next version is `0.2.0`, held in `VERSION`; `tools/build.sh` uses it for the
 
 `tools/prepare-distribution.py` generates a versioned archive, metadata and cask only after checking Developer ID signatures, arm64 architecture, Gatekeeper and a stapled ticket. Final version 0.2.0 is signed and accepted by Apple (submission `f68f7cab-e535-4d76-b5e5-e0afe2307797`), stapled and verified after extraction. Archive SHA-256: `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`. The local `aervane-notary` Keychain profile holds the credentials; no private keys are in source control or on Claude's host. The user's original Developer ID/API creation approvals have already been fulfilled.
 
-Release assets and the generated cask are ready for GitHub publication and a fresh Homebrew install. Preserve immutable release assets once published; corrections need a new version.
+**Published and installed:** https://github.com/kirniy/aervane/releases/tag/v0.2.0. The cask is live in `kirniy/homebrew-tap`, and a fresh `brew install --cask kirniy/tap/aervane` succeeded. The public download checksum matches, installed signatures/ticket validate, and the normal first-launch Open confirmation states that Apple checked the app. A newly registered helper applied 76% (target 3724, actual 3725 RPM). Dot Grid survived the replacement/relaunch; Channel was selected afterward. **Final requested state: Manual 76%, Return to Auto OFF.** Do not change it after verification. Preserve immutable release assets; corrections need a new version.
+
+Local cask style and the full online audit pass. The online audit ran successfully on GitHub's macOS runner: https://github.com/kirniy/homebrew-tap/actions/runs/39855983205. This Mac's Xcode 26.2 is rejected by Homebrew's build-environment preflight on macOS 27, so the supported runner provides that check. No Xcode or security settings were changed. See `docs/verification.md` for the existing Gatekeeper-global-configuration limitation.
 
 - Physical pointer drag, repeated actual status-item clicks, outside dismissal, rapid toggles and multiple monitors. Native handler regression tests and keyboard/accessibility paths pass; app-scoped CUA reports `AXError.notImplemented` for pointer drag/click on the custom slider. Do not claim a physical drag test.
 - Real VoiceOver, Reduce Motion/Transparency, light theme, 1× screens and long-content states.
 - Physical helper/app crash, sleep/wake and expired-lease scenarios beyond the controlled normal restoration tests.
 - More Mac models, multiple fans and Intel/alternate mode-key support.
-- Fresh public-release installation through Homebrew. Signing, notarization, stapling and generation of the real checksum/cask are complete.
+

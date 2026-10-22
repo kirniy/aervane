@@ -25,12 +25,20 @@
 - Closing the panel removes transient layer animations. A 30-second background sample with the helper active measured 0.33% of one core for the app; see [resource measurements](performance.md) for memory and sampling limits.
 - REA/Hopper CLI produced saved evidence for the control routines, obfuscated constants and model predicates. All five embedded resource pairs match between Intel and ARM slices.
 
+## Public release installation
+
+Version 0.2.0 is published at [GitHub Releases](https://github.com/kirniy/aervane/releases/tag/v0.2.0), with the cask in [kirniy/tap](https://github.com/kirniy/homebrew-tap). Source CI passed at `a20130f`. A fresh `brew install --cask kirniy/tap/aervane` downloaded the public archive, verified its checksum and installed it in Applications. The cask passes local style and [the online Homebrew audit on GitHub’s macOS runner](https://github.com/kirniy/homebrew-tap/actions/runs/39855983205). Local audit setup rejects Xcode 26.2 on macOS 27; the supported runner completed the same check. The cached archive SHA-256 matches `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`. Strict installed signatures and the stapled ticket validate.
+
+The first launch showed macOS’s normal Internet-download confirmation, explicitly stating that Apple checked the app and found no malicious software. After Open, the app launched and a newly registered helper applied 76%: mode 1, target 3724 RPM, actual 3725 RPM. Dot Grid persisted across replacement/relaunch, and Return to Auto remained off. Channel was selected afterward and manual 76% left active at the user’s request.
+
+`spctl` reported `source=Notarized Developer ID`, but also `override=security disabled` from this Mac’s existing global configuration. That configuration was not changed. Apple’s accepted notarization result, stapled ticket and signed code were separately verified; this is not a test of every clean Mac’s policy configuration.
+
 ## Remaining checks
 
 - Physical pointer dragging and repeated clicks on the actual menu-bar status item. CUA's app-scoped native interface returns `AXError.notImplemented` for pointer drag/click on the custom slider; handler tests do not substitute for physical pointer testing.
 - Real VoiceOver, Reduce Motion/Transparency, light appearance, 1× displays and multiple screens.
 - Physical crash, sleep/wake, lease-expiry and fault-injection recovery beyond the normal verified Auto restoration. Automated recovery tests cover the corresponding policy and journal paths.
 - Additional Mac models, multiple fans and alternate mode-key implementations.
-- Public release installation and Homebrew publication are the remaining distribution checks. The final Developer ID archive is notarized, stapled and verified.
+
 
 No flawless or universal-hardware-support claim is made.

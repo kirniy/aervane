@@ -25,7 +25,6 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 swift test
 SIGN_IDENTITY='Developer ID Application: …' NOTARY_PROFILE=aervane-notary tools/release.sh
 python3 tools/prepare-distribution.py
-brew style dist/distribution/aervane.rb
 ```
 
 `release.sh` signs the app and helper, submits the archive, staples the accepted ticket and verifies the extracted archive. `prepare-distribution.py` checks identity/version, matching app/helper signing teams, architecture, Gatekeeper and the stapled ticket before generating the versioned ZIP, SHA-256 checksum, release metadata and matching cask.
@@ -36,7 +35,7 @@ Ad hoc and development-signed archives are rejected. No placeholder checksums ar
 
 1. Publish the verified ZIP, `release.json` and `SHA256SUMS.txt` in GitHub release `v<VERSION>`.
 2. Push the generated `aervane.rb` into `Casks/` in `kirniy/homebrew-tap`.
-3. Run `brew update`, `brew audit --cask --online kirniy/tap/aervane`, then verify installation in a separate application directory.
+3. Run `brew style Casks/aervane.rb` from the tap checkout (Homebrew recognizes the `Casks/` directory), then `brew audit --cask --online kirniy/tap/aervane` and verify a fresh installation.
 4. Check the downloaded archive checksum, extracted signature and notarization ticket before declaring the release ready.
 
 Quit Aervane before upgrading; normal Quit restores automatic fan control. The cask's uninstall hook unregisters the signed helper after quitting the app. An unregistered or missing helper exits successfully without requiring a hardware probe. Setup may request macOS approval again when the new app opens.
@@ -48,3 +47,5 @@ Keep release assets immutable after publication. A correction requires a new ver
 Apple accepted notarization submission `f68f7cab-e535-4d76-b5e5-e0afe2307797`. The app was stapled and validated, then re-archived and extracted for strict signature verification. Distribution preparation also passed Gatekeeper assessment, arm64 and minimum-version checks, matching app/helper Developer ID teams, and ticket validation.
 
 Archive SHA-256: `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`.
+
+A fresh Homebrew installation of the public archive succeeded on the development Mac. Its downloaded checksum, installed Developer ID signatures and stapled ticket were verified. The ordinary first-launch Open confirmation was accepted; a newly registered helper then applied manual 76%. The tap’s macOS CI workflow passed cask style and the online audit: https://github.com/kirniy/homebrew-tap/actions/runs/39855983205.

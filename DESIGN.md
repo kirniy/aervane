@@ -91,7 +91,7 @@ The first viewport is a 344 pt glass panel. It holds a mark and name, a large ro
 - Event-driven motion only: no idle animation, timers, display links or particles. The slider answers the hand (grab, speed, release) with finite reactions.
 - Keyboard-complete: every core action has a plain key, and text fields keep their own keys.
 
-*Implementation status (2026-10-23):* Both slider styles compile with Xcode 26.2 and all 153 macOS tests pass. The channel has been rendered and exercised in the installed app with real 100% and 76% control. Switching styles is covered by regression tests for preserving value, hardware floor, measured speed, enabled/stale state and effects without preview or commit callbacks. The native window’s outer rectangular outline is fixed and confirmed by the user. Physical pointer dragging, real VoiceOver, system Reduce Motion/Transparency, light appearance and 1× displays still need broader device verification; handler tests do not establish those results.
+*Implementation status (2026-10-23):* Both slider styles compile with Xcode 26.2 and all 153 macOS tests pass. Both are rendered in the installed release, and the saved style survived a fresh Homebrew installation. The channel has been rendered and exercised in the installed app with real 100% and 76% control. Switching styles is covered by regression tests for preserving value, hardware floor, measured speed, enabled/stale state and effects without preview or commit callbacks. The native window’s outer rectangular outline is fixed and confirmed by the user. Physical pointer dragging, real VoiceOver, system Reduce Motion/Transparency, light appearance and 1× displays still need broader device verification; handler tests do not establish those results.
 
 ## Colors
 
