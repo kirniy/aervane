@@ -4,37 +4,188 @@
   "title": "Design System: Aervane",
   "extensions": {
     "colorMeta": {
-      "accent-light": {"role": "primary", "displayName": "Spruce", "canonical": "#126B57"},
-      "accent-dark": {"role": "primary", "displayName": "Muted Mint", "canonical": "#8FDBC2"},
-      "caution-light": {"role": "tertiary", "displayName": "Ochre", "canonical": "#A3630A"},
-      "caution-dark": {"role": "tertiary", "displayName": "Sand", "canonical": "#F2BF6B"},
-      "secondary-light": {"role": "neutral", "displayName": "Secondary Light", "canonical": "#5C5C5C"},
-      "secondary-dark": {"role": "neutral", "displayName": "Secondary Dark", "canonical": "#ADADAD"}
+      "accent-light": {
+        "role": "primary",
+        "displayName": "Spruce",
+        "canonical": "#126B57"
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Muted Mint",
+        "canonical": "#8FDBC2"
+      },
+      "caution-light": {
+        "role": "tertiary",
+        "displayName": "Ochre",
+        "canonical": "#A3630A"
+      },
+      "caution-dark": {
+        "role": "tertiary",
+        "displayName": "Sand",
+        "canonical": "#F2BF6B"
+      },
+      "secondary-light": {
+        "role": "neutral",
+        "displayName": "Secondary Light",
+        "canonical": "#5C5C5C"
+      },
+      "secondary-dark": {
+        "role": "neutral",
+        "displayName": "Secondary Dark",
+        "canonical": "#ADADAD"
+      },
+      "ice-mid-dark": {
+        "role": "secondary",
+        "displayName": "Glacier Cyan",
+        "canonical": "#6BD6F5"
+      },
+      "ice-high-dark": {
+        "role": "secondary",
+        "displayName": "Ice White",
+        "canonical": "#DBFAFF"
+      },
+      "rime-dark": {
+        "role": "secondary",
+        "displayName": "Rime",
+        "canonical": "#EDFCFF"
+      },
+      "heat-warm-dark": {
+        "role": "tertiary",
+        "displayName": "Warm Amber",
+        "canonical": "#F5CC6B"
+      },
+      "heat-hot-dark": {
+        "role": "tertiary",
+        "displayName": "Hot Orange",
+        "canonical": "#FF9E57"
+      },
+      "heat-peak-dark": {
+        "role": "tertiary",
+        "displayName": "Peak Coral",
+        "canonical": "#FF786B"
+      }
     },
     "typographyMeta": {
-      "display": {"displayName": "SF Rounded Display", "purpose": "Large temperature figure."},
-      "numeric": {"displayName": "SF Pro Tabular Digits", "purpose": "Stable fan percentages and preset values."}
+      "display": {
+        "displayName": "SF Rounded Display",
+        "purpose": "Large 52 pt temperature figure."
+      },
+      "numeric": {
+        "displayName": "SF Pro Tabular Digits",
+        "purpose": "Stable fan percentages and preset values."
+      }
     },
     "shadows": [
-      {"name": "slider-thumb", "value": "0 0 1.5pt rgba(0,0,0,0.45)", "purpose": "Legibility for the white slider thumb on dark glass."},
-      {"name": "panel-native", "value": "AppKit window shadow", "purpose": "Native floating panel depth."}
+      {
+        "name": "slider-thumb",
+        "value": "0 0 1.5pt rgba(0,0,0,0.45)",
+        "purpose": "Legibility for the white slider thumb on dark glass."
+      },
+      {
+        "name": "panel-native",
+        "value": "AppKit window shadow",
+        "purpose": "Native floating panel depth."
+      }
     ],
     "motion": [
-      {"name": "glide", "value": "180ms cubic-bezier(0.2,0.8,0.2,1)", "purpose": "Thumb and fill movement for committed non-drag changes."},
-      {"name": "panel-fade", "value": "160ms ease-out", "purpose": "Panel show transition when Reduce Motion is off."},
-      {"name": "reduced-motion", "value": "instant", "purpose": "Disables decorative movement and bloom when requested by the system."}
+      {
+        "name": "press",
+        "value": "90ms ease-out to 0.96, spring release (stiffness 420, damping 17)",
+        "purpose": "Tactile button press."
+      },
+      {
+        "name": "fill",
+        "value": "180ms cubic-bezier(0.23,1,0.32,1)",
+        "purpose": "Hover/selection fill cross-fade."
+      },
+      {
+        "name": "glide",
+        "value": "200ms cubic-bezier(0.23,1,0.32,1)",
+        "purpose": "Thumb, fill, frost reveal and halo for pointer jumps, presets and model changes. Keyboard is instant."
+      },
+      {
+        "name": "mode-pill",
+        "value": "spring (stiffness 300, damping 24)",
+        "purpose": "Auto/Manual selection."
+      },
+      {
+        "name": "ice-formation",
+        "value": "620ms reveal + flake spring",
+        "purpose": "User reaching 100% cooling (Expressive only)."
+      },
+      {
+        "name": "melt",
+        "value": "280ms",
+        "purpose": "Ice crown recedes when cooling is lowered."
+      },
+      {
+        "name": "release-sweep",
+        "value": "550ms",
+        "purpose": "Light runs back along the lit dots after a pointer release."
+      },
+      {
+        "name": "temperature-roll",
+        "value": "300ms push",
+        "purpose": "Temperature figure changes."
+      },
+      {
+        "name": "aura",
+        "value": "600–900ms",
+        "purpose": "Heat band change; a rising band breathes in once."
+      },
+      {
+        "name": "section-swap",
+        "value": "260ms slide + 200ms fade",
+        "purpose": "Fan section ↔ Settings."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "instant",
+        "purpose": "System Reduce Motion removes all movement; static state remains."
+      }
     ]
   },
   "narrative": {
     "northStar": "The Native Instrument",
-    "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads, direct percentage control follows, and setup, presets, editing, and settings stay inline inside a glass panel.",
-    "keyCharacteristics": ["Native AppKit glass", "SF system typography", "Truthful fan state", "Direct percentage interaction"],
-    "rules": [
-      {"name": "The State Must Speak Rule", "body": "Use plain-language state labels with semantic color; color never carries status alone.", "section": "colors"},
-      {"name": "The Stable Number Rule", "body": "Use monospaced digits for values that change during interaction.", "section": "typography"},
-      {"name": "The Material First Rule", "body": "Use native glass and tonal separation before adding shadow.", "section": "elevation"}
+    "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads; direct percentage control follows. Layout and controls carry state with minimal copy. Cooling power is rendered in ice, measured temperature in heat.",
+    "keyCharacteristics": [
+      "Native AppKit glass",
+      "Ice for cooling, heat for temperature",
+      "Event-driven Core Animation only",
+      "Minimal copy"
     ],
-    "dos": ["Keep temperature first and the direct percentage control immediately available.", "Preserve the hardware minimum and distinguish requested from measured speed.", "Keep presets and settings inline."],
-    "donts": ["Do not introduce dashboard cards or modal speed dialogs.", "Do not describe preview as applied.", "Do not canonize the captured pointer-glow artifact; physical pointer dragging was unavailable during review."]
+    "rules": [
+      {
+        "name": "The State Must Speak Rule",
+        "body": "Use plain-language state labels with semantic color; color never carries status alone.",
+        "section": "colors"
+      },
+      {
+        "name": "The Stable Number Rule",
+        "body": "Use monospaced digits for values that change during interaction.",
+        "section": "typography"
+      },
+      {
+        "name": "The Material First Rule",
+        "body": "Use native glass and tonal separation before adding shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Two Families Rule",
+        "body": "Cooling is never warm and heat is never icy.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Keep temperature first and the direct percentage control immediately available.",
+      "Preserve the hardware minimum and distinguish requested from measured speed.",
+      "Keep presets and settings inline."
+    ],
+    "donts": [
+      "Do not add taglines, footers or section labels.",
+      "Do not describe preview as applied.",
+      "Do not add idle animation, timers or particles.",
+      "Do not let a heat state imply that manual control is blocked."
+    ]
   }
 }

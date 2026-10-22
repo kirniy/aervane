@@ -17,33 +17,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var outsideMonitor: Any?
     private var localMonitor: Any?
     private var ending = false
+    private var glass: NSView?
+    private var observers: [NSObjectProtocol] = []
+    /// Heat band for the menu bar, kept current while the panel is closed.
+    private var statusThermal = ThermalState.unknown
+    private lazy var statusIcon: NSImage = { let icon = Glyphs.image(.airflow, size: 14); icon.isTemplate = true; return icon }()
+    private let statusFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         installKeyboardCommands()
         model = AppModel(); content = PanelView(model: model)
-        item = NSStatusBar.system.statusItem(withLength: 70)
+        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            button.target = self; button.action = #selector(toggle); button.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+            button.target = self; button.action = #selector(toggle); button.font = statusFont
             button.sendAction(on: .leftMouseDown)
-            let icon = Glyphs.image(.airflow, size: 14); icon.isTemplate = true; button.image = icon; button.imagePosition = .imageLeading; button.imageHugsTitle = true
-            button.toolTip = "Aervane · CPU temperature and fan control"; button.setAccessibilityLabel("Aervane temperature and fan control")
+            button.imageHugsTitle = true
+            button.setAccessibilityLabel("Aervane temperature and fan control")
         }
-        panel = MenuPanel(contentRect: .init(x: 0, y: 0, width: 380, height: 458), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = MenuPanel(contentRect: .init(x: 0, y: 0, width: PanelView.width, height: 300), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true; panel.level = .popUpMenu; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.isMovable = false; panel.hidesOnDeactivate = false
+        // The content view draws no backing of its own, so the system
+        // material is what shows through everywhere.
         if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: content.bounds); glass.cornerRadius = 26; glass.style = .regular; glass.contentView = content; panel.contentView = glass
+            let glass = NSGlassEffectView(frame: content.bounds); glass.cornerRadius = 24; glass.style = .regular; glass.contentView = content; panel.contentView = glass
+            self.glass = glass
         } else {
-            let glass = NSVisualEffectView(frame: content.bounds); glass.material = .popover; glass.blendingMode = .behindWindow; glass.state = .active; glass.wantsLayer = true; glass.layer?.cornerRadius = 22; glass.layer?.masksToBounds = true; glass.addSubview(content); panel.contentView = glass
+            let glass = NSVisualEffectView(frame: content.bounds); glass.material = .popover; glass.blendingMode = .behindWindow; glass.state = .active; glass.wantsLayer = true; glass.layer?.cornerRadius = 20; glass.layer?.masksToBounds = true; glass.addSubview(content); panel.contentView = glass
+            self.glass = glass
         }
         content.autoresizingMask = [.width, .height]
         panel.escape = { [weak self] in self?.hide() }
         panel.initialFirstResponder = content.preferredFirstResponder
         content.resize = { [weak self] height in self?.resize(height) }; content.quit = { NSApp.terminate(nil) }
+        content.thermalChanged = { [weak self] state in self?.tintGlass(for: state); self?.updateStatusItem() }
         model.changed = { [weak self] in self?.refresh() }; refresh()
+        // Presentation choices and system accessibility settings apply at once.
+        observers.append(NotificationCenter.default.addObserver(forName: PresentationPreferences.didChange, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }; self.content.applyPresentation(); self.tintGlass(for: self.content.thermal); self.updateStatusItem()
+        })
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }; self.content.applyPresentation(); self.tintGlass(for: self.content.thermal)
+        })
         if CommandLine.arguments.contains("--show") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.show() } }
         if CommandLine.arguments.contains("--enable-helper") { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.show(); self.model.enableControl() } }
     }
-    private func refresh() { item.button?.title = " \(model.temperatureText)\(model.temperatureUnit)"; if panel.isVisible { content.update() } }
+    private func refresh() { updateStatusItem(); if panel.isVisible { content.update() } }
+
+    /// Sizes the status item to its measured content plus a small native
+    /// margin (no fixed width, no padding characters in the title).
+    private func updateStatusItem() {
+        guard let button = item.button else { return }
+        let prefs = PresentationPreferences.shared, display = prefs.menuBarContent
+        let title = StatusItemLayout.title(temperatureText: model.temperatureText)
+        let attributes: [NSAttributedString.Key: Any] = [.font: statusFont]
+        let titleWidth = max((title as NSString).size(withAttributes: attributes).width,
+                             (StatusItemLayout.reservedTitle as NSString).size(withAttributes: attributes).width)
+        button.image = display.showsIcon ? statusIcon : nil
+        button.imagePosition = display == .icon ? .imageOnly : display == .temperature ? .noImage : .imageLeading
+        statusThermal = model.stale ? .unknown : ThermalState.classify(model.displayTemperature, previous: statusThermal)
+        if display.showsTemperature {
+            // Hot readings may carry their heat colour; otherwise the system
+            // label colour keeps menu bar vibrancy and highlight inversion.
+            let state = statusThermal
+            if prefs.heatColor && state >= .hot {
+                button.attributedTitle = NSAttributedString(string: title, attributes: [.font: statusFont, .foregroundColor: Theme.heat(state)])
+            } else {
+                button.title = title
+            }
+        } else { button.title = "" }
+        item.length = CGFloat(StatusItemLayout.length(content: display, spacing: prefs.menuBarSpacing,
+                                                      iconWidth: Double(statusIcon.size.width), titleWidth: Double(titleWidth)))
+        let sensor = model.selectedSensor == "Warmer" ? "Warmer of CPU and GPU averages" : model.selectedSensor
+        button.toolTip = "\(sensor) \(model.temperatureText)\(model.temperatureUnit)"
+        button.setAccessibilityValue("\(sensor) \(model.temperatureText)\(model.temperatureUnit)")
+    }
+
+    /// On macOS 26 the glass itself carries a faint heat tint when the
+    /// reading is warm or hotter. Reduce Transparency keeps it untinted.
+    private func tintGlass(for state: ThermalState) {
+        guard #available(macOS 26.0, *), let glass = glass as? NSGlassEffectView else { return }
+        let prefs = PresentationPreferences.shared
+        let tinted = prefs.heatColor && prefs.effects != .off && !Theme.reduceTransparency && state >= .warm
+        glass.tintColor = tinted ? Theme.heat(state).withAlphaComponent(state == .warm ? 0.06 : state == .hot ? 0.09 : 0.12) : nil
+    }
     private func installKeyboardCommands() {
         // Accessory apps still need an Edit menu for the field editor's native
         // command-key equivalents (including Select All and Paste).
@@ -71,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         panel.alphaValue = Theme.reduceMotion ? 1 : 0; panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(content.preferredFirstResponder)
+        content.playEntrance()
         if !Theme.reduceMotion { NSAnimationContext.runAnimationGroup { $0.duration = 0.16; $0.timingFunction = CAMediaTimingFunction(name: .easeOut); panel.animator().alphaValue = 1 } }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, !self.isPointerOverStatusItem() else { return }; self.hide()

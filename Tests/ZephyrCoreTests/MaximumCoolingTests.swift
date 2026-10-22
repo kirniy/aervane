@@ -52,7 +52,7 @@ final class MaximumCoolingTests: XCTestCase {
         }
     }
 
-    func testRejectedHotReductionKeepsConfirmedMaximum() throws {
+    func testHotReductionAppliesAndMissingHeartbeatStillRestores() throws {
         let hardware = ThermalDriver(), owner = UUID()
         let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })
         _ = try controller.set(percent: 100, session: owner)
@@ -63,7 +63,7 @@ final class MaximumCoolingTests: XCTestCase {
         XCTAssertEqual(hardware.restores, 1)
     }
 
-    func testHotMaximumDoesNotExemptOtherSafetyFailures() throws {
+    func testHotControlStillRequiresReliableTelemetryAndHeartbeat() throws {
         let faults: [(ThermalDriver) -> Void] = [
             { $0.temperature = .nan }, { $0.temperature = 131 }, { $0.temperature = -21 },
             { $0.sampleAge = 11 }, { $0.clock = $0.clock.addingTimeInterval(16) }, { $0.count = 2 }
@@ -126,7 +126,7 @@ final class MaximumCoolingTests: XCTestCase {
         }
     }
 
-    func testPercentageRoundsToWholeNumberBeforeMaximumCheck() throws {
+    func testPercentageRoundsToWholeNumber() throws {
         let hardware = ThermalDriver()
         let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })
         _ = try controller.set(percent: 99.5, session: UUID())

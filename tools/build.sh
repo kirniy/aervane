@@ -25,6 +25,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/
 cp "$BUILD_DIR/$CONFIG/Aervane" "$APP/Contents/MacOS/Aervane"
 cp "$BUILD_DIR/$CONFIG/AervaneHelper" "$APP/Contents/Library/LaunchDaemons/AervaneHelper"
 cp "$ROOT/Resources/Aervane.icns" "$APP/Contents/Resources/Aervane.icns"
+cp "$ROOT/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 cp "$ROOT/Resources/dev.kirniy.aervane.helper.plist" "$APP/Contents/Library/LaunchDaemons/dev.kirniy.aervane.helper.plist"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'

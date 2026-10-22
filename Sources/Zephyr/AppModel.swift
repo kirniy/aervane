@@ -258,7 +258,7 @@ final class AppModel {
     private func startHeartbeat() {
         stopHeartbeat(); guard ownsControl else { return }
         let connection = connectionGeneration
-        heartbeat = Timer.scheduledTimer(withTimeInterval: FanSafety.heartbeatInterval, repeats: true) { [weak self] _ in
+        heartbeat = Timer(timeInterval: FanSafety.heartbeatInterval, repeats: true) { [weak self] _ in
             // A command in flight renews the helper lease itself; a heartbeat
             // would only queue behind it on the helper's serial queue.
             guard let self, !self.requests.isBusy else { return }
@@ -277,6 +277,10 @@ final class AppModel {
             }
         }
         heartbeat?.tolerance = 0.5
+        // Native controls track in a different run-loop mode. Holding a
+        // button or dragging the optional time slider must not look like a
+        // disconnected client to the helper.
+        if let heartbeat { RunLoop.main.add(heartbeat, forMode: .common) }
     }
     private func stopHeartbeat() { heartbeat?.invalidate(); heartbeat = nil }
     private func configureReturnTimer(enabled: Bool, minutes: Double) {

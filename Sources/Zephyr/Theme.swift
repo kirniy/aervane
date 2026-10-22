@@ -1,7 +1,11 @@
 import AppKit
+import QuartzCore
 
 /// Design tokens. Colours are dynamic so a light/dark switch never leaves a
 /// stale grey behind; spacing follows the 4/8 pt grid described in DESIGN.md.
+///
+/// Two colour families never mix: **ice** (cyan → white) is cooling power on
+/// the slider; **heat** (amber → coral) is the measured temperature.
 enum Theme {
     /// Resolves against the appearance currently drawing (a view's own
     /// appearance inside draw/updateLayer), falling back to the app's.
@@ -14,12 +18,53 @@ enum Theme {
     static var caution: NSColor { dynamic(light: NSColor(srgbRed: 0.64, green: 0.39, blue: 0.04, alpha: 1), dark: NSColor(srgbRed: 0.95, green: 0.75, blue: 0.42, alpha: 1)) }
     static var faint: NSColor { ink.withAlphaComponent(0.065) }
     static var hairline: NSColor { ink.withAlphaComponent(0.10) }
+
+    // Cooling power (slider). Low speeds start at the brand mint and cool
+    // through glacier cyan to ice white at full cooling.
+    static var iceLow: NSColor { accent }
+    static var iceMid: NSColor { dynamic(light: NSColor(srgbRed: 0.04, green: 0.47, blue: 0.62, alpha: 1), dark: NSColor(srgbRed: 0.42, green: 0.84, blue: 0.96, alpha: 1)) }
+    static var iceHigh: NSColor { dynamic(light: NSColor(srgbRed: 0.02, green: 0.40, blue: 0.66, alpha: 1), dark: NSColor(srgbRed: 0.86, green: 0.98, blue: 1.0, alpha: 1)) }
+    /// Frost crystals: bright rime on dark glass, deep glacier ink on light.
+    static var rime: NSColor { dynamic(light: NSColor(srgbRed: 0.10, green: 0.46, blue: 0.64, alpha: 1), dark: NSColor(srgbRed: 0.93, green: 0.99, blue: 1.0, alpha: 1)) }
+
+    /// Measured temperature bands. Cool and normal stay neutral so colour
+    /// appears only when it says something.
+    static func heat(_ state: ThermalState) -> NSColor {
+        switch state {
+        case .unknown: return secondary
+        case .cool: return accent
+        case .steady: return ink
+        case .warm: return dynamic(light: NSColor(srgbRed: 0.60, green: 0.42, blue: 0.0, alpha: 1), dark: NSColor(srgbRed: 0.96, green: 0.80, blue: 0.42, alpha: 1))
+        case .hot: return dynamic(light: NSColor(srgbRed: 0.72, green: 0.33, blue: 0.04, alpha: 1), dark: NSColor(srgbRed: 1.0, green: 0.62, blue: 0.34, alpha: 1))
+        case .peak: return dynamic(light: NSColor(srgbRed: 0.74, green: 0.16, blue: 0.12, alpha: 1), dark: NSColor(srgbRed: 1.0, green: 0.47, blue: 0.42, alpha: 1))
+        }
+    }
+
     static var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    static var reduceTransparency: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
+    /// The current ceiling for decoration and motion (user level, lowered by
+    /// Reduce Motion / Reduce Transparency).
+    static var effects: EffectsProfile {
+        EffectsProfile(level: PresentationPreferences.shared.effects, reduceMotion: reduceMotion, reduceTransparency: reduceTransparency)
+    }
+
+    /// Strong ease-out for responses, ease-in-out for on-screen travel.
+    enum Ease {
+        static let out = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+        static let inOut = CAMediaTimingFunction(controlPoints: 0.65, 0, 0.35, 1)
+    }
+
     static func font(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont { .systemFont(ofSize: size, weight: weight) }
     static func number(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont { .monospacedDigitSystemFont(ofSize: size, weight: weight) }
     static func rounded(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
         let font = NSFont.systemFont(ofSize: size, weight: weight)
         return font.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? font
+    }
+    /// Resolves a dynamic colour for a layer under a view's appearance.
+    static func cg(_ color: NSColor, _ appearance: NSAppearance) -> CGColor {
+        var resolved = color.cgColor
+        appearance.performAsCurrentDrawingAppearance { resolved = color.cgColor }
+        return resolved
     }
     private static func dynamic(light: NSColor, dark: NSColor) -> NSColor {
         NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light }
@@ -35,11 +80,37 @@ func label(_ text: String, size: CGFloat = 13, weight: NSFont.Weight = .regular,
     return view
 }
 
-enum Glyph: String { case airflow, quiet, balance, boost, settings, close, plus, back, power }
+enum Glyph: String { case airflow, quiet, balance, boost, settings, close, plus, back, power, github }
 
 enum Glyphs {
+    /// The GitHub mark, parsed once from bundled path data (y-down, 16 pt box).
+    private static let githubMark: NSBezierPath = {
+        let path = NSBezierPath()
+        for segment in VectorPath.parse(VectorPath.githubMark) {
+            switch segment {
+            case .move(let p): path.move(to: p)
+            case .line(let p): path.line(to: p)
+            case .curve(let c1, let c2, let p): path.curve(to: p, controlPoint1: c1, controlPoint2: c2)
+            case .close: path.close()
+            }
+        }
+        path.windingRule = .evenOdd
+        return path
+    }()
+
     static func image(_ glyph: Glyph, size: CGFloat = 18, color: NSColor = .labelColor) -> NSImage {
-        NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
+        if glyph == .github {
+            // Filled mark, drawn in its own y-down box with a small optical
+            // inset so it matches the stroked glyphs' visual weight.
+            let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
+                let transform = NSAffineTransform(); transform.translateX(by: size * 0.08, yBy: size * 0.08)
+                transform.scale(by: size * 0.84 / 16); transform.concat()
+                color.setFill(); githubMark.fill(); return true
+            }
+            image.accessibilityDescription = "GitHub"
+            return image
+        }
+        return NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
             let transform = NSAffineTransform(); transform.scale(by: size / 24); transform.concat()
             color.setStroke(); color.setFill()
             let p = NSBezierPath(); p.lineWidth = 1.65; p.lineCapStyle = .round; p.lineJoinStyle = .round
@@ -68,73 +139,232 @@ enum Glyphs {
             case .plus: p.move(to: .init(x: 5, y: 12)); p.line(to: .init(x: 19, y: 12)); p.move(to: .init(x: 12, y: 5)); p.line(to: .init(x: 12, y: 19))
             case .back: p.move(to: .init(x: 15, y: 5)); p.line(to: .init(x: 8, y: 12)); p.line(to: .init(x: 15, y: 19))
             case .power: p.appendArc(withCenter: .init(x: 12, y: 11), radius: 8, startAngle: 55, endAngle: 125, clockwise: true); p.move(to: .init(x: 12, y: 14)); p.line(to: .init(x: 12, y: 23))
+            case .github: break
             }
             p.stroke(); return true
         }
     }
 }
 
-/// Compact native-feeling button. `quiet` buttons have no resting fill (icon
-/// and text actions); `detail` renders a right-aligned figure (preset %).
-/// Press feedback is a fill change, not a scale, matching AppKit buttons.
+/// Compact native-feeling button. The fill lives on the backing layer so
+/// selection, hover and press changes cross-fade; the content is drawn.
+/// Press feedback is a short scale-down with a spring release.
+/// `quiet` buttons have no resting fill; `chromeless` buttons never draw a
+/// fill (a container such as ModeSwitch supplies it); `detail` stacks a
+/// figure under the title (preset percentages).
 final class SoftButton: NSButton {
     var actionBlock: (() -> Void)?
-    var selected = false { didSet { if selected != oldValue { needsDisplay = true } } }
-    var prominent = false { didSet { if prominent != oldValue { needsDisplay = true } } }
-    var quiet = false { didSet { if quiet != oldValue { needsDisplay = true } } }
+    var selected = false { didSet { if selected != oldValue { refreshFill(animated: true); needsDisplay = true } } }
+    var prominent = false { didSet { if prominent != oldValue { refreshFill(animated: false); needsDisplay = true } } }
+    var quiet = false { didSet { if quiet != oldValue { refreshFill(animated: false); needsDisplay = true } } }
+    var chromeless = false { didSet { if chromeless != oldValue { refreshFill(animated: false); needsDisplay = true } } }
+    /// Selected text and fill colour; accent by default.
+    var selectedTint: NSColor? { didSet { refreshFill(animated: false); needsDisplay = true } }
     var detail: String? { didSet { if detail != oldValue { needsDisplay = true } } }
-    var glyph: Glyph?
+    var glyph: Glyph? { didSet { if glyph != oldValue { needsDisplay = true } } }
     private var hovered = false
+    private var pressed = false
     private var tracking: NSTrackingArea?
+
     init(_ title: String, glyph: Glyph? = nil, action: @escaping () -> Void) {
         self.glyph = glyph; self.actionBlock = action
         super.init(frame: .zero); self.title = title; self.isBordered = false
         self.font = Theme.font(12, .medium); target = self; self.action = #selector(invoke)
         wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
         setAccessibilityLabel(title); focusRingType = .exterior
+        refreshFill(animated: false)
     }
     required init?(coder: NSCoder) { fatalError() }
     @objc private func invoke() { actionBlock?() }
-    override var isEnabled: Bool { didSet { if isEnabled != oldValue { needsDisplay = true } } }
+    override func accessibilityValue() -> Any? {
+        if accessibilityRole() == .radioButton { return NSNumber(value: selected) }
+        return super.accessibilityValue()
+    }
+    override var isEnabled: Bool { didSet { if isEnabled != oldValue { refreshFill(animated: true); needsDisplay = true } } }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    private var radius: CGFloat { min(8, bounds.height / 2) }
+    private var radius: CGFloat { min(9, bounds.height / 2) }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); layer?.cornerRadius = radius }
     override var focusRingMaskBounds: NSRect { bounds }
     override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill() }
     override func updateTrackingAreas() { super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }; let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self); addTrackingArea(t); tracking = t }
-    override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
-    override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
-    func resetHover() { hovered = false; needsDisplay = true }
+    override func mouseEntered(with event: NSEvent) { hovered = true; refreshFill(animated: true); needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hovered = false; refreshFill(animated: true); needsDisplay = true }
+    func resetHover() {
+        hovered = false; pressed = false
+        layer?.removeAllAnimations(); layer?.transform = CATransform3DIdentity
+        refreshFill(animated: false); needsDisplay = true
+    }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); resetHover() }
-    override func draw(_ dirtyRect: NSRect) {
-        let pressed = isEnabled && cell?.isHighlighted == true, hover = isEnabled && hovered
-        let active = selected || prominent
-        let fill: NSColor
-        if active { fill = Theme.accent.withAlphaComponent(pressed ? 0.28 : hover ? 0.22 : 0.16) }
-        else if quiet { fill = Theme.ink.withAlphaComponent(pressed ? 0.12 : hover ? 0.07 : 0) }
-        else { fill = Theme.ink.withAlphaComponent(pressed ? 0.13 : hover ? 0.085 : 0.05) }
-        fill.setFill(); NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshFill(animated: false); needsDisplay = true }
 
-        let base: NSColor = active ? Theme.accent : quiet ? (title.isEmpty ? (hover ? Theme.ink : Theme.secondary) : Theme.accent) : Theme.ink
-        let tint = base.withAlphaComponent(isEnabled ? 1 : 0.3)
-        let font = self.font ?? Theme.font(12, .medium), inset: CGFloat = 10
+    /// NSButton tracks the press inside `super.mouseDown`, which returns on
+    /// release (after the action has run for a click inside).
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { super.mouseDown(with: event); return }
+        setPressed(true)
+        super.mouseDown(with: event)
+        setPressed(false)
+    }
+
+    private var tint: NSColor { selectedTint ?? Theme.accent }
+    private var fillColor: NSColor {
+        if chromeless { return .clear }
+        let active = selected || prominent, hover = isEnabled && hovered
+        if active { return tint.withAlphaComponent(pressed ? 0.30 : hover ? 0.23 : 0.17) }
+        if quiet { return Theme.ink.withAlphaComponent(pressed ? 0.12 : hover ? 0.07 : 0) }
+        return Theme.ink.withAlphaComponent(!isEnabled ? 0.03 : pressed ? 0.13 : hover ? 0.085 : 0.05)
+    }
+    private func refreshFill(animated: Bool) {
+        guard let layer else { return }
+        let target = Theme.cg(fillColor, effectiveAppearance)
+        let from = layer.presentation()?.backgroundColor ?? layer.backgroundColor
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.backgroundColor = target; layer.cornerRadius = radius
+        if animated, window != nil, Theme.effects.animates, let from {
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = from; fade.toValue = target
+            fade.duration = pressed ? 0.08 : 0.18; fade.timingFunction = Theme.Ease.out
+            layer.add(fade, forKey: "fill")
+        }
+        CATransaction.commit()
+    }
+    /// Scale about the visual centre whatever anchor AppKit gave the layer.
+    private func scaled(_ scale: CGFloat) -> CATransform3D {
+        guard let layer, scale != 1 else { return CATransform3DIdentity }
+        let cx = bounds.width * (0.5 - layer.anchorPoint.x), cy = bounds.height * (0.5 - layer.anchorPoint.y)
+        return CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(cx, cy, 0), scale, scale, 1), -cx, -cy, 0)
+    }
+    private func setPressed(_ down: Bool) {
+        pressed = down; refreshFill(animated: true); needsDisplay = true
+        guard let layer, window != nil else { return }
+        let target = scaled(down ? (bounds.width > 120 ? 0.985 : 0.96) : 1)
+        let from = layer.presentation()?.transform ?? layer.transform
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.transform = target
+        if Theme.effects.animates {
+            let animation: CABasicAnimation
+            if down {
+                animation = CABasicAnimation(keyPath: "transform"); animation.duration = 0.09; animation.timingFunction = Theme.Ease.out
+            } else {
+                let spring = CASpringAnimation(keyPath: "transform")
+                spring.mass = 1; spring.stiffness = 420; spring.damping = 17
+                spring.duration = spring.settlingDuration; animation = spring
+            }
+            animation.fromValue = NSValue(caTransform3D: from); animation.toValue = NSValue(caTransform3D: target)
+            layer.add(animation, forKey: "press")
+        }
+        CATransaction.commit()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let active = selected || prominent, hover = isEnabled && hovered
+        let base: NSColor
+        if chromeless { base = selected ? tint : (hover ? Theme.ink : Theme.secondary) }
+        else if active { base = tint }
+        else if quiet { base = title.isEmpty ? (hover ? Theme.ink : Theme.secondary) : Theme.accent }
+        else { base = Theme.ink }
+        let color = base.withAlphaComponent(isEnabled ? 1 : 0.3)
+        let font = self.font ?? Theme.font(12, .medium), inset: CGFloat = 11
         if let detail {
-            let figure = NSAttributedString(string: detail, attributes: [.font: Theme.number(11), .foregroundColor: (active ? Theme.accent : Theme.secondary).withAlphaComponent(isEnabled ? 1 : 0.3)])
-            let figureSize = figure.size()
-            figure.draw(at: NSPoint(x: bounds.maxX - inset - figureSize.width, y: (bounds.height - figureSize.height) / 2))
+            // Preset: name above, effective percentage below, left aligned.
             let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
-            let name = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: tint, .paragraphStyle: style])
-            let height = name.size().height
-            name.draw(with: NSRect(x: inset, y: (bounds.height - height) / 2, width: max(0, bounds.width - 2 * inset - figureSize.width - 6), height: height), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            let name = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style])
+            let figure = NSAttributedString(string: detail, attributes: [.font: Theme.number(11, .medium), .foregroundColor: (active ? tint : Theme.secondary).withAlphaComponent(isEnabled ? (active ? 0.85 : 1) : 0.3)])
+            let nameHeight = name.size().height, figureHeight = figure.size().height
+            let top = ((bounds.height - nameHeight - figureHeight + 1) / 2).rounded()
+            name.draw(with: NSRect(x: inset, y: top, width: max(0, bounds.width - 2 * inset), height: nameHeight), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            figure.draw(at: NSPoint(x: inset, y: top + nameHeight - 1))
             return
         }
-        let text = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: tint])
+        let text = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: color])
         let textSize = title.isEmpty ? .zero : text.size()
         let icon: CGFloat = glyph == nil ? 0 : 16, gap: CGFloat = glyph != nil && !title.isEmpty ? 6 : 0
         var x = ((bounds.width - textSize.width - icon - gap) / 2).rounded()
         if let glyph {
-            Glyphs.image(glyph, size: 16, color: tint).draw(in: NSRect(x: x, y: ((bounds.height - 16) / 2).rounded(), width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            Glyphs.image(glyph, size: 16, color: color).draw(in: NSRect(x: x, y: ((bounds.height - 16) / 2).rounded(), width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             x += icon + gap
         }
-        if !title.isEmpty { text.draw(at: NSPoint(x: x, y: (bounds.height - textSize.height) / 2)) }
+        if !title.isEmpty { text.draw(at: NSPoint(x: x, y: ((bounds.height - textSize.height) / 2).rounded())) }
+    }
+}
+
+/// Auto / Manual as one control: a pill slides to the active mode with a
+/// spring and changes material with the state (neutral for Auto, accent
+/// for applied Manual, caution for a preview that is not applied). The two
+/// buttons keep their own accessibility labels for VoiceOver and agents.
+final class ModeSwitch: FlippedView {
+    enum Mode: Equatable { case automatic, manual, none }
+    let autoButton: SoftButton
+    let manualButton: SoftButton
+    private let track = FlippedView()
+    private let pill = CALayer()
+
+    var mode: Mode = .none { didSet { if mode != oldValue { refresh(animated: true) } } }
+    /// Manual is shown but nothing is applied yet.
+    var pending = false { didSet { if pending != oldValue { refresh(animated: true) } } }
+
+    init(auto: SoftButton, manual: SoftButton) {
+        autoButton = auto; manualButton = manual
+        super.init(frame: .zero)
+        wantsLayer = true; track.wantsLayer = true
+        track.layer?.addSublayer(pill)
+        addSubview(track)
+        for button in [auto, manual] {
+            button.chromeless = true
+            button.setAccessibilityRole(.radioButton)
+            addSubview(button)
+        }
+        refresh(animated: false)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        track.frame = bounds
+        let half = (bounds.width / 2).rounded()
+        autoButton.frame = NSRect(x: 0, y: 0, width: half, height: bounds.height)
+        manualButton.frame = NSRect(x: half, y: 0, width: bounds.width - half, height: bounds.height)
+        refresh(animated: false)
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh(animated: false) }
+
+    private var pillColor: NSColor {
+        switch mode {
+        case .automatic: return Theme.ink.withAlphaComponent(0.13)
+        case .manual: return (pending ? Theme.caution : Theme.accent).withAlphaComponent(0.22)
+        case .none: return .clear
+        }
+    }
+    private func refresh(animated: Bool) {
+        guard let trackLayer = track.layer else { return }
+        let appearance = effectiveAppearance
+        trackLayer.backgroundColor = Theme.cg(Theme.ink.withAlphaComponent(0.055), appearance)
+        trackLayer.cornerRadius = bounds.height / 2
+        let inset: CGFloat = 2, half = bounds.width / 2
+        let x = mode == .manual ? half : 0
+        let frame = NSRect(x: x + inset, y: inset, width: max(0, half - 2 * inset), height: max(0, bounds.height - 2 * inset))
+        let color = Theme.cg(pillColor, appearance)
+        let from = (pill.presentation() ?? pill)
+        let fromPosition = from.position, fromColor = from.backgroundColor, fromOpacity = from.opacity
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        pill.bounds = CGRect(origin: .zero, size: frame.size)
+        pill.cornerRadius = frame.height / 2
+        if mode != .none { pill.position = CGPoint(x: frame.midX, y: frame.midY); pill.backgroundColor = color }
+        pill.opacity = mode == .none ? 0 : 1
+        if animated, window != nil, Theme.effects.animates, bounds.width > 0 {
+            let slide = CASpringAnimation(keyPath: "position")
+            slide.mass = 1; slide.stiffness = 300; slide.damping = 24
+            slide.fromValue = NSValue(point: fromPosition); slide.toValue = NSValue(point: pill.position)
+            slide.duration = slide.settlingDuration
+            let tone = CABasicAnimation(keyPath: "backgroundColor"); tone.fromValue = fromColor; tone.toValue = pill.backgroundColor
+            tone.duration = 0.2; tone.timingFunction = Theme.Ease.out
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = fromOpacity; fade.toValue = pill.opacity
+            fade.duration = 0.16
+            pill.add(slide, forKey: "slide"); pill.add(tone, forKey: "tone"); pill.add(fade, forKey: "fade")
+        }
+        CATransaction.commit()
+        autoButton.selectedTint = Theme.ink; autoButton.selected = mode == .automatic
+        manualButton.selectedTint = pending ? Theme.caution : Theme.accent; manualButton.selected = mode == .manual
     }
 }
