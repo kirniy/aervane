@@ -6,7 +6,14 @@ import ZephyrCore
 final class AppModel {
     var changed: (() -> Void)?
     private let queue = DispatchQueue(label: "dev.kirniy.aervane.sensors", qos: .utility)
-    private let reader = SMCReader()
+    private let reader: TelemetryReader
+    private let defaults: UserDefaults
+    private let startsServices: Bool
+    private var temperatureSampledAt: Date?
+    private(set) var fanAvailable = false
+    private(set) var fanReadError: String?
+    private(set) var hasTelemetryRead = false
+    var temperatureStale: Bool { temperatureSampledAt.map { Date().timeIntervalSince($0) > 12 } ?? true }
     private var timer: DispatchSourceTimer?
     private var heartbeat: Timer?
     private var helper: HelperClient?
@@ -25,7 +32,7 @@ final class AppModel {
     /// the selected sensor otherwise. The menu bar keeps the selected sensor.
     var panelReadout: TemperatureReadout {
         TemperatureReadout.panel(smartEnabled: control.smartEnabled, smart: smartSample, selectedSensor: selectedSensor,
-                                 selectedCelsius: displayTemperature, stale: stale, now: Date())
+                                 selectedCelsius: displayTemperature, stale: control.smartEnabled ? stale : temperatureStale, now: Date())
     }
     var error: String?
     /// True while connecting, setting up, or while a fan command is in flight.
@@ -42,10 +49,10 @@ final class AppModel {
     var setupMessage: String? { helperApprovalRequired ? "Allow Aervane in System Settings → Login Items. macOS may ask for your password." : nil }
     var panelVisible = false { didSet { if panelVisible { nextReconnect = .distantPast }; schedulePoll() } }
     var presets: [FanPreset]
-    var selectedSensor: String { didSet { UserDefaults.standard.set(selectedSensor, forKey: "sensor"); poll() } }
+    var selectedSensor: String { didSet { defaults.set(selectedSensor, forKey: "sensor"); poll() } }
     var displayTemperature: Double?
-    var fahrenheit: Bool { didSet { UserDefaults.standard.set(fahrenheit, forKey: "fahrenheit"); changed?() } }
-    var lowPower: Bool { didSet { UserDefaults.standard.set(lowPower, forKey: "lowPower"); schedulePoll() } }
+    var fahrenheit: Bool { didSet { defaults.set(fahrenheit, forKey: "fahrenheit"); changed?() } }
+    var lowPower: Bool { didSet { defaults.set(lowPower, forKey: "lowPower"); schedulePoll() } }
     private var returnTimer: ManualReturnTimer
     /// Opt-in Smart cooling (off by default). Any user speed or Auto ends it.
     var smartEnabled: Bool { control.smartEnabled }
@@ -74,13 +81,13 @@ final class AppModel {
     /// Speed the user most recently asked for that the helper has not confirmed.
     var requestedPercent: Double? { pendingPercent ?? control.pendingPercent }
     var shownPercent: Double { requestedPercent ?? sample?.targetPercent ?? actualPercent }
-    var temperatureText: String { guard let temp = displayTemperature, !stale else { return "—" }; return String(Int((fahrenheit ? temp * 1.8 + 32 : temp).rounded())) }
+    var temperatureText: String { guard let temp = displayTemperature, !temperatureStale else { return "—" }; return String(Int((fahrenheit ? temp * 1.8 + 32 : temp).rounded())) }
     var temperatureUnit: String { fahrenheit ? "°F" : "°C" }
     var stale: Bool { sample.map { Date().timeIntervalSince($0.sampledAt) > 12 } ?? true }
     var loginEnabled: Bool { SMAppService.mainApp.status == .enabled }
 
-    init() {
-        let defaults = UserDefaults.standard
+    init(reader: TelemetryReader = .live(), defaults: UserDefaults = .standard, startsServices: Bool = true) {
+        self.reader = reader; self.defaults = defaults; self.startsServices = startsServices
         returnTimer = ManualReturnTimer(enabled: defaults.bool(forKey: "autoReturnEnabled"),
                                        minutes: defaults.object(forKey: "autoReturnMinutes") as? Double ?? 30)
         // A Smart choice persists across launches; a fault turns it off (and
@@ -93,6 +100,7 @@ final class AppModel {
         if let data = defaults.data(forKey: "presets"), let saved = try? JSONDecoder().decode([FanPreset].self, from: data) {
             presets = Array(saved.filter { !$0.name.isEmpty && $0.name.count <= 20 && $0.percent.isFinite && (0...100).contains($0.percent) }.prefix(6))
         } else { presets = [FanPreset(name: "Quiet", percent: 30), FanPreset(name: "Balanced", percent: 60), FanPreset(name: "Boost", percent: 100)] }
+        guard startsServices else { return }
         let center = NSWorkspace.shared.notificationCenter
         sleepObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.willSleep() })
         sleepObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -105,6 +113,7 @@ final class AppModel {
     }
     deinit { for observer in sleepObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }; timer?.cancel(); heartbeat?.invalidate() }
     func schedulePoll() {
+        guard startsServices else { return }
         timer?.cancel()
         // Smart needs fresh readings to react in time, so it keeps a 2 s
         // cadence with the panel closed, overriding Low power.
@@ -124,51 +133,14 @@ final class AppModel {
         let wantsGPU = sensor != "CPU" || control.smartEnabled
         queue.async { [weak self] in
             guard let self else { return }
-            let result: Result<(FanSnapshot, Double?, SmartCoolingReading), Error> = Result {
-                let cpu = try self.reader.readCPUTemperatures(), fan = try self.reader.readFan()
-                var temp: Double? = cpu.average
-                let gpu = wantsGPU ? try? self.reader.readGPUTemperature() : nil
-                // An unavailable optional display sensor must not end
-                // manual control while CPU and fan telemetry are healthy.
-                if sensor == "GPU" { temp = gpu }
-                else if sensor != "CPU" { temp = max(cpu.average, gpu ?? cpu.average) }
-                // Smart follows the hottest core (and a hotter GPU average)
-                // whatever the menu bar shows.
-                let smartReading = SmartCoolingReading(cpuHottest: cpu.hottest, gpu: gpu)
-                return (FanSnapshot(currentRPM: fan.currentRPM, minimumRPM: fan.minimumRPM, maximumRPM: fan.maximumRPM, targetPercent: fan.targetPercent, automatic: fan.automatic, temperatureCelsius: cpu.average), temp, smartReading)
-            }
+            let reading = self.reader.read(wantsGPU: wantsGPU)
             DispatchQueue.main.async {
                 self.polling = false
                 // A read begun before a fan command cannot describe its result.
                 guard generation == self.controlGeneration, sensor == self.selectedSensor else { return }
-                switch result {
-                case .success(let (snapshot, temp, smartReading)):
-                    self.sample = snapshot; self.displayTemperature = temp
-                    if self.error?.hasPrefix("Sensor:") == true { self.error = nil }
-                    if let temp {
-                        self.history.append(temp); if self.history.count > 60 { self.history.removeFirst(self.history.count - 60) }
-                    } else {
-                        self.history.removeAll()
-                        if self.error == nil { self.error = "Sensor: GPU temperature is unavailable on this Mac." }
-                    }
-                    if self.ownsControl && snapshot.automatic {
-                        // The helper may already have restored Auto after a
-                        // safety event. Readback confirms that transition; do
-                        // not repeatedly ask a released lease to restore again.
-                        self.ownsControl = false; self.returnTimer.cancel()
-                        self.stopHeartbeat()
-                        self.stopSmart(.controlLost)
-                    } else if self.ownsControl && self.returnTimer.isDue(now: .now) { self.restore() }
-                    self.control.observe(automatic: snapshot.automatic && !self.ownsControl)
-                    self.runSmart(smartReading, generation: smartGeneration)
-                case .failure(let failure):
-                    self.error = "Sensor: \(failure.localizedDescription)"; self.displayTemperature = nil
-                    // A read that fails across sleep is not Smart's failure.
-                    if self.control.smartEnabled { if self.control.smartActive { self.stopSmart(.sensorFailed) } }
-                    else if self.ownsControl { self.restore() }
-                }
+                self.acceptTelemetry(reading, sensor: sensor, smartGeneration: smartGeneration)
                 self.changed?()
-                if !self.helperReady, !self.busy, Date() >= self.nextReconnect {
+                if self.startsServices, !self.helperReady, !self.busy, Date() >= self.nextReconnect {
                     self.nextReconnect = Date().addingTimeInterval(10)
                     let status = self.installer.status
                     self.helperApprovalRequired = status == .requiresApproval
@@ -177,6 +149,37 @@ final class AppModel {
                 }
             }
         }
+    }
+    /// Kept separate from I/O so channel failures and recovery can be tested
+    /// without connecting a helper or touching hardware.
+    func acceptTelemetry(_ reading: TelemetryReading, sensor: String, smartGeneration: UInt64 = 0) {
+        hasTelemetryRead = true
+        fanAvailable = reading.fanAvailable; fanReadError = reading.fanError
+        displayTemperature = reading.temperature(sensor: sensor)
+        if case .success = reading.cpu { temperatureSampledAt = reading.at }
+        else { temperatureSampledAt = nil }
+        if error?.hasPrefix("Sensor:") == true { error = nil }
+        if let temp = displayTemperature {
+            history.append(temp); if history.count > 60 { history.removeFirst(history.count - 60) }
+        } else {
+            history.removeAll()
+            if let failure = reading.cpuError { error = "Sensor: \(failure)" }
+            else if error == nil { error = "Sensor: GPU temperature is unavailable on this Mac." }
+        }
+        guard let snapshot = reading.snapshot, let smartReading = reading.smartReading else {
+            // Never let the last good fan reading enable writes after a failure.
+            sample = nil
+            if control.smartEnabled { if control.smartActive { stopSmart(.sensorFailed) } }
+            else if ownsControl { restore() }
+            return
+        }
+        sample = snapshot
+        if ownsControl && snapshot.automatic {
+            ownsControl = false; returnTimer.cancel(); stopHeartbeat()
+            stopSmart(.controlLost)
+        } else if ownsControl && returnTimer.isDue(now: .now) { restore() }
+        control.observe(automatic: snapshot.automatic && !ownsControl)
+        runSmart(smartReading, generation: smartGeneration)
     }
     func enableControl() {
         guard !busy else { return }
@@ -282,7 +285,7 @@ final class AppModel {
         let value = SmartTarget.clamp(celsius)
         guard value != control.smartTarget else { return }
         control.setSmartTarget(value)
-        UserDefaults.standard.set(value, forKey: Self.smartTargetKey)
+        defaults.set(value, forKey: Self.smartTargetKey)
         changed?()
     }
     /// The user took hold of the slider or its keys: Manual at once, with no
@@ -316,7 +319,6 @@ final class AppModel {
         schedulePoll(); changed?()
     }
     private func persistSmart() {
-        let defaults = UserDefaults.standard
         defaults.set(control.smartEnabled, forKey: Self.smartKey)
         if let reason = control.notice?.reason { defaults.set(reason.rawValue, forKey: Self.smartStopKey) }
         else { defaults.removeObject(forKey: Self.smartStopKey) }
@@ -448,10 +450,10 @@ final class AppModel {
     private func stopHeartbeat() { heartbeat?.invalidate(); heartbeat = nil }
     private func configureReturnTimer(enabled: Bool, minutes: Double) {
         returnTimer.configure(enabled: enabled, minutes: minutes, manual: ownsControl && !control.smartEnabled, now: .now)
-        UserDefaults.standard.set(returnTimer.enabled, forKey: "autoReturnEnabled")
-        UserDefaults.standard.set(returnTimer.minutes, forKey: "autoReturnMinutes")
+        defaults.set(returnTimer.enabled, forKey: "autoReturnEnabled")
+        defaults.set(returnTimer.minutes, forKey: "autoReturnMinutes")
         changed?()
     }
-    func savePresets() { if let data = try? JSONEncoder().encode(presets) { UserDefaults.standard.set(data, forKey: "presets") }; changed?() }
+    func savePresets() { if let data = try? JSONEncoder().encode(presets) { defaults.set(data, forKey: "presets") }; changed?() }
     func toggleLogin() { do { if loginEnabled { try SMAppService.mainApp.unregister() } else { try SMAppService.mainApp.register() }; changed?() } catch { self.error = error.localizedDescription; changed?() } }
 }
