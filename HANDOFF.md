@@ -4,15 +4,13 @@ Updated 2026-10-24. Public repository: https://github.com/kirniy/aervane. Native
 
 ## Current work
 
-Version 0.5.0 compatibility work is in progress; 0.4.0 is the current public GitHub and Homebrew release. The public cask upgrade from 0.3.0 passed, and the installed signature and stapled ticket validate. Final hardware readback: Manual 76%, target 3724 RPM, actual 3725 RPM. Smart and Return to Auto are off; saved target is 70°C.
+0.5.0 adds universal Intel/Apple Silicon app and helper builds on macOS 13+, discovered multi-fan control, model-aware SMC/HID temperatures, fanless monitoring and multi-fan journal recovery. Actual Claude implemented the main compatibility package; local integration added GPU-peak failure handling, native HID ownership/ABI corrections, aggregate-gate readback, scoped recovery and universal release checks.
 
-Actual Claude implemented the all-speed Dot Grid wave, editable Smart target on the graph, inline first-run flow, and discoverable keyboard hints. Parent integration added independent fan/temperature reads, approval retry recovery, verified Auto before hiding fan controls, stable layouts through transient fan failures, and paused hidden onboarding motion. No new runtime dependencies or per-frame application loops.
+The 394-test suite passed natively and through Intel executables. The signed universal app passed the real helper verification: 100% target, independent fan readback and confirmed Auto restoration. See [0.5.0 verification](docs/verification-0.5.0.md), [Mac compatibility](docs/mac-compatibility.md), and [distribution](docs/distribution.md) for exact release/CI receipts.
 
-The latest Mac suite passed **300 tests** on Xcode 27.1, including compositor motion and Smart-target drag/keyboard/Accessibility tests. The signed 0.4.0 bundle was installed through the public cask after normal quit and an independent Auto readback. Live graph dragging, bracket keys, Accessibility target updates, onboarding replay and Temperature-only restoration have passed on the installed app. Auto was independently read back. Actual panel/onboarding/settings captures and a 30-frame motion clip replace prior media.
+The existing design remains: live Dot Grid and Channel, editable Smart target on the graph, inline onboarding and one shared temperature readout for menu bar and panel. Motion stops when hidden. No runtime dependencies, per-frame application loops or network polling were added.
 
-A reported menu-bar/panel mismatch was caused by different sources: selected CPU average in the menu bar versus Smart's CPU peak in the panel. Both now use the same TemperatureReadout, including units, freshness and accessible source description. Auto/Manual still honor the saved sensor preference. The installed Smart panel correctly shows CPU PEAK; menu-bar formatting now has a regression test against the identical model readout, including a 68°C average / 74°C peak fixture. The app-window UI capture does not include the desktop menu-bar item.
-
-System Reduce Motion was disabled at the user's explicit request in the prior session; Reduce Transparency remains enabled. Respect other users' accessibility preferences.
+After the public Homebrew upgrade, the panel is running Smart at the saved 70°C target; Return to Auto is off. Preserve the latest active selection rather than restoring an older request. System Reduce Motion is off at the user's request; Reduce Transparency is on. Respect other users' accessibility preferences.
 
 ## Persistent product requirements
 
@@ -24,7 +22,7 @@ A tiny, exceptionally polished macOS menu-bar utility. Temperature at a glance, 
 
 **High temperature must not block manual fan control.** The former 95°C restriction was an Aervane policy mistake, not an AppleSMC limit. It was removed from command acceptance and watchdog restoration. Do not reintroduce it. Hardware bounds, stale/invalid telemetry, lost clients, failed-write rollback and recovery remain applicable.
 
-Manual control has no expiry by default. Return to Auto is opt-in, with a 5–120 minute settings slider. It is separate from the helper connection watchdog and applies only to manual speeds. Preserve the latest user-selected state: **Smart ON, target 70°C, Return to Auto OFF** (superseding the earlier Manual 76% request). The user actively exercises the app during development; recheck the final state rather than relying on an earlier sample.
+Manual control has no expiry by default. Return to Auto is opt-in, with a 5–120 minute settings slider. It is separate from the helper connection watchdog and applies only to manual speeds. Preserve the latest user-selected state, currently **Smart ON, target 70°C, Return to Auto OFF** (superseding the earlier Manual 76% request). The user actively exercises the app during development; recheck the final state rather than relying on an earlier sample.
 
 Slider style is independent of effects: **Channel** or **Dot Grid**. The latest request authorizes redesigning both. Effects are Off/Subtle/Expressive, with system Reduce Motion/Transparency respected. The requested miniature fan pattern may rotate while the panel is visible using bounded compositor animations; stop it when hidden or motion/effects are disabled. No per-frame application loop, display link, network polling, telemetry or embedded browser. Actual heat and cooling power use distinct colors.
 
@@ -64,6 +62,6 @@ This Mac’s existing Gatekeeper global configuration reports `override=security
 ## Follow-up verification
 
 - Public release/tap/CI evidence belongs in docs/distribution.md. Current real app images and Dot Grid animation are in docs/assets.
-- Finish local work with the latest user selection, currently Smart ON, target 70°C, ReturnToAutoOFF; recheck preferences before replacement. Preserve latest saved target (last observed 70°C); user actively changes settings.
+- Finish local work with the latest user selection; recheck preferences before replacement. Preserve latest saved target (last observed 70°C); user actively changes settings.
 - Physical dragging was user-confirmed. Broader crash/sleep/wake/watchdog, fanless/multi-fan models, VoiceOver, 1× and multi-display checks remain incomplete. Unit tests do not establish hardware coverage.
-- Read temperature independently of fan failures before claiming temperature-only support on fanless/unsupported models. The current release is physically verified only on the M4 mini.
+- Temperature and fan failures are independent. Fanless monitoring and multi-model protocol fixtures have regression tests; keep physical hardware observations distinct from fixture coverage.

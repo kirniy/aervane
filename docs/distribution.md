@@ -69,3 +69,14 @@ The public Homebrew upgrade from 0.2.0 to 0.3.0 succeeded on the development Mac
 - Public Homebrew upgrade 0.3.0 → 0.4.0 succeeded. Installed Developer ID signature and stapled-ticket validation passed.
 - Source CI runs `39959072564` and `39959083715` were still running at this record; local Mac suite passed 300 tests, followed by focused checks of the final chart Accessibility and temperature-sync changes.
 - Final independent fan readback: manual, target 3724 RPM, actual 3725 RPM (76%).
+
+## 0.5.0 universal release
+
+- [Public release](https://github.com/kirniy/aervane/releases/tag/v0.5.0): one Intel/Apple Silicon archive for macOS 13+.
+- Source: `5af76dd9fda9edfd05da7f82da6802e723e38543`.
+- Apple notarization accepted: `e1fd2c37-caa7-4aeb-a9e1-c47cc080b5b1`.
+- SHA-256: `ac6f3d37ac4c49fa3a2012e517ee7e85d48ca7104d37cfe3a83309f9efd85ebb`.
+- Source CI `39999909209` passed tests and universal builds on Intel and Apple Silicon.
+- Local public Homebrew upgrade 0.4.0 → 0.5.0 passed; installed signatures and ticket validated.
+- [Full verification receipt](verification-0.5.0.md).
+- Tap CI `40000620676` passed fresh public installation, online audit, signature/ticket and executable signing checks on both Intel and Apple Silicon.

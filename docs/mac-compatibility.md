@@ -18,4 +18,4 @@ The built-in catalog normalizes model aliases and selects CPU/GPU sensors by fam
 
 Both the application and privileged helper include native arm64 and x86_64 code. Distribution preparation verifies all signatures and checks the actual deployment target of each slice. CI runs the test suite on Apple Silicon and Intel runners.
 
-See the linked verification receipt for protocol fixtures, failure recovery, runtime checks and the exact release revision.
+See the [0.5.0 verification receipt](verification-0.5.0.md) for protocol fixtures, failure recovery, runtime checks and the exact release revision.
