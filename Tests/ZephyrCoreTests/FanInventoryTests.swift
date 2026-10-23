@@ -66,9 +66,10 @@ final class FanInventoryTests: XCTestCase {
     }
 
     func testSixFans() throws {
-        let limits: [(minimum: Double, maximum: Double)] = (0..<6).map { index in
-            (minimum: 800.0 + 100.0 * Double(index), maximum: 2500.0 + 300.0 * Double(index))
-        }
+        let limits: [(minimum: Double, maximum: Double)] = [
+            (800, 2500), (900, 2800), (1000, 3100),
+            (1100, 3400), (1200, 3700), (1300, 4000)
+        ]
         let smc = FakeSMC.obedient(fans: limits)
         let inventory = try reader(smc).read()
         XCTAssertEqual(inventory.fans.map(\.index), Array(0..<6))
