@@ -4,7 +4,7 @@ Updated 2026-10-23. Public repository: https://github.com/kirniy/aervane. Native
 
 ## Current work
 
-Version 0.3.0 is ready for publication. The final Mac suite passed **257 tests**, including actual presentation-layer motion over time, rotor RPM scaling, full-cooling flow, reopen, and temperature-transition behavior. The signed archive passed Apple notarization and stapled-ticket validation.
+Version 0.3.0 is published on GitHub and Homebrew; the public upgrade was verified. The final Mac suite passed **257 tests**, including actual presentation-layer motion over time, rotor RPM scaling, full-cooling flow, reopen, and temperature-transition behavior. The signed archive passed Apple notarization and stapled-ticket validation.
 
 Dot Grid is the default for new or invalid preferences; saved choices remain. Dot Grid has no fan graphics. Channel rotors follow actual measured RPM at a proportional visual scale. Both styles have continuous maximum-cooling effects. Temperature uses rounded tabular digits and a short crossfade rather than pushing the whole number.
 

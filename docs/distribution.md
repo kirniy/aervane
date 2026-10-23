@@ -55,3 +55,5 @@ A fresh Homebrew installation of the public archive succeeded on the development
 Apple accepted submission `b67b970a-0834-4a43-b410-4c87cb41320f`. The final temperature-crossfade build passed 257 Mac tests, Developer ID signature verification, stapling, extracted-archive checks and distribution preparation. Archive SHA-256: `3b6f6b21e31ea37a1d7b140dd2558cd403f77a5897ea8b6b8411ef7ac3705018`.
 
 The development Mac has a pre-existing global Gatekeeper override; assessment on this machine is not clean-machine Gatekeeper validation. Cryptographic signatures and the stapled Apple ticket were checked separately.
+
+The public Homebrew upgrade from 0.2.0 to 0.3.0 succeeded on the development Mac. The downloaded installation passed strict signature verification, matching Developer ID team verification and stapled-ticket validation. The helper reconnected and independently measured 3724 RPM at manual 76%. The tap's online audit and style CI passed: https://github.com/kirniy/homebrew-tap/actions/runs/39946315049.

@@ -51,10 +51,11 @@ import XCTest
         let control = PercentSlider(frame: NSRect(x: 0, y: 0, width: 372, height: 32))
         control.minimumPercent = 21
         var commits: [Double] = []
-        control.commit = { commits.append($0) }
+        let committed = expectation(description: "Debounced accessibility edit commits")
+        control.commit = { commits.append($0); committed.fulfill() }
         control.setAccessibilityValue(NSNumber(value: 0))
         XCTAssertEqual(control.accessibilityValue() as? NSNumber, 21)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        wait(for: [committed], timeout: 2)
         XCTAssertEqual(commits, [21])
         control.isEnabled = false
         control.setAccessibilityValue(NSNumber(value: 100))
