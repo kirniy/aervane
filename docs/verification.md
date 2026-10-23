@@ -65,3 +65,14 @@ The first launch showed macOS’s normal Internet-download confirmation, explici
 
 
 No flawless or universal-hardware-support claim is made.
+
+
+## 0.4.0 — 2026-10-23
+
+- Mac suite: 300 passing tests (105 core, 13 SMC, 171 interface, 11 helper), Xcode 27.1. Subsequent focused chart and telemetry tests passed after the Accessibility-enabled fix and explicit CPU-average/peak synchronization assertion.
+- Installed-app checks: Smart target dragged physically from 70 to 72°C; bracket keys stepped it back to 70°C; Accessibility set it to 71°C and back. Target changes kept Smart enabled. Actual live Dot Grid motion was captured below maximum cooling.
+- Replayed onboarding through Settings, selected Temperature only, and verified `F0Md=0`, target 1000 RPM, current 1005 RPM using the independent probe. Re-enabled fan controls through Settings.
+- Normal quit independently verified Auto before helper replacement. Return-to-Auto preference remained disabled. Existing target preserved at 70°C.
+- Independent temperature/fan failures and fanless monitoring paths use simulated fixtures; physical hardware coverage remains the M4 Mac mini.
+- Menu-bar/panel use the same TemperatureReadout in all modes; regression uses CPU average 68°C versus Smart peak 74°C, Fahrenheit and stale telemetry. App-window captures do not include the desktop menu-bar item.
+- Full VoiceOver navigation, multi-display, fanless hardware and fresh-account OS authorization prompts remain unverified.

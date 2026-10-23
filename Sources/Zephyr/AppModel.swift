@@ -13,6 +13,10 @@ final class AppModel {
     private(set) var fanAvailable = false
     private(set) var fanReadError: String?
     private(set) var hasTelemetryRead = false
+    private(set) var hasDetectedFan = false
+    /// Unknown hardware keeps the initial layout; a once-readable fan stays
+    /// visible through transient failures so recovery/errors cannot disappear.
+    var offersFanControls: Bool { !hasTelemetryRead || hasDetectedFan }
     var temperatureStale: Bool { temperatureSampledAt.map { Date().timeIntervalSince($0) > 12 } ?? true }
     private var timer: DispatchSourceTimer?
     private var heartbeat: Timer?
@@ -20,6 +24,7 @@ final class AppModel {
     private var connectionGeneration = UUID()
     private var controlGeneration: UInt64 = 0
     private var nextReconnect = Date.distantPast
+    private var approvalCheckUntil = Date.distantPast
     private let installer = HelperInstaller()
     private var sleepObservers: [NSObjectProtocol] = []
     var sample: FanSnapshot?
@@ -29,7 +34,7 @@ final class AppModel {
     private(set) var smartSample: SmartSample?
     private(set) var smartHistory: [Double] = []
     /// The panel's temperature: Smart's own measurement while Smart runs,
-    /// the selected sensor otherwise. The menu bar keeps the selected sensor.
+    /// the selected sensor otherwise. The menu bar uses this same readout.
     var panelReadout: TemperatureReadout {
         TemperatureReadout.panel(smartEnabled: control.smartEnabled, smart: smartSample, selectedSensor: selectedSensor,
                                  selectedCelsius: displayTemperature, stale: control.smartEnabled ? stale : temperatureStale, now: Date())
@@ -47,7 +52,15 @@ final class AppModel {
     var helperReady = false
     var helperApprovalRequired = false
     var setupMessage: String? { helperApprovalRequired ? "Allow Aervane in System Settings → Login Items. macOS may ask for your password." : nil }
-    var panelVisible = false { didSet { if panelVisible { nextReconnect = .distantPast }; schedulePoll() } }
+    var panelVisible = false {
+        didSet {
+            if panelVisible {
+                nextReconnect = .distantPast
+                if !oldValue && helperApprovalRequired { approvalCheckUntil = Date().addingTimeInterval(120) }
+            }
+            schedulePoll()
+        }
+    }
     var presets: [FanPreset]
     var selectedSensor: String { didSet { defaults.set(selectedSensor, forKey: "sensor"); poll() } }
     var displayTemperature: Double?
@@ -81,7 +94,7 @@ final class AppModel {
     /// Speed the user most recently asked for that the helper has not confirmed.
     var requestedPercent: Double? { pendingPercent ?? control.pendingPercent }
     var shownPercent: Double { requestedPercent ?? sample?.targetPercent ?? actualPercent }
-    var temperatureText: String { guard let temp = displayTemperature, !temperatureStale else { return "—" }; return String(Int((fahrenheit ? temp * 1.8 + 32 : temp).rounded())) }
+    var temperatureText: String { panelReadout.text(fahrenheit: fahrenheit) }
     var temperatureUnit: String { fahrenheit ? "°F" : "°C" }
     var stale: Bool { sample.map { Date().timeIntervalSince($0.sampledAt) > 12 } ?? true }
     var loginEnabled: Bool { SMAppService.mainApp.status == .enabled }
@@ -141,7 +154,10 @@ final class AppModel {
                 self.acceptTelemetry(reading, sensor: sensor, smartGeneration: smartGeneration)
                 self.changed?()
                 if self.startsServices, !self.helperReady, !self.busy, Date() >= self.nextReconnect {
-                    self.nextReconnect = Date().addingTimeInterval(10)
+                    // Reuse the visible panel's existing 1 s sensor cadence while
+                    // approval is pending; after two minutes return to 10 s.
+                    let fastApproval = self.panelVisible && self.helperApprovalRequired && Date() < self.approvalCheckUntil
+                    self.nextReconnect = Date().addingTimeInterval(fastApproval ? 1 : 10)
                     let status = self.installer.status
                     self.helperApprovalRequired = status == .requiresApproval
                     if status == .enabled { self.connectHelper() }
@@ -155,6 +171,7 @@ final class AppModel {
     func acceptTelemetry(_ reading: TelemetryReading, sensor: String, smartGeneration: UInt64 = 0) {
         hasTelemetryRead = true
         fanAvailable = reading.fanAvailable; fanReadError = reading.fanError
+        if fanAvailable { hasDetectedFan = true }
         displayTemperature = reading.temperature(sensor: sensor)
         if case .success = reading.cpu { temperatureSampledAt = reading.at }
         else { temperatureSampledAt = nil }
@@ -195,6 +212,7 @@ final class AppModel {
             let status = try installer.enable()
             helperApprovalRequired = status == .requiresApproval
             if helperApprovalRequired {
+                approvalCheckUntil = Date().addingTimeInterval(120)
                 settingUp = false; changed?()
                 SMAppService.openSystemSettingsLoginItems()
             } else { connectHelper() }
@@ -248,8 +266,8 @@ final class AppModel {
         if let ticket { send(ticket) } else { changed?() }
     }
     /// The user chose Auto: ends Smart and returns the fan to firmware control.
-    func chooseAutomatic() {
-        requestAutomatic(completion: nil) { owns in self.control.userAutomatic(owns: owns) }
+    func chooseAutomatic(completion: (() -> Void)? = nil) {
+        requestAutomatic(completion: completion) { owns in self.control.userAutomatic(owns: owns) }
     }
     /// Returns the fan to firmware control (sleep, quit, Return to Auto, a
     /// manual sensor failure). Always accepted: while another command is in

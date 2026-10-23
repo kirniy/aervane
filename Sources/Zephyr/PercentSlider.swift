@@ -42,6 +42,9 @@ final class PercentSlider: NSControl {
     /// stale. Drives only the Channel's miniature rotors (`RotorMotion`); it
     /// never affects the value, commits or fan policy.
     var measuredRPM: Double? { didSet { if measuredRPM != oldValue { updateAmbient() } } }
+    /// The fan's firmware maximum (RPM), with `measuredRPM` the Dot Grid's
+    /// wave pace (`DotVitality`). Presentation only.
+    var maximumRPM: Double? { didSet { if maximumRPM != oldValue { updateAmbient() } } }
     /// Decoration ceiling (user level, lowered by system accessibility).
     var effects = Theme.effects { didSet { if effects != oldValue { skin.decorate(animated: false, userAction: false); updateAmbient() } } }
     /// The slider is on screen (panel shown, Settings closed). Continuous
@@ -60,6 +63,9 @@ final class PercentSlider: NSControl {
     /// now, sampled over time to prove movement rather than attachment.
     var rotorShownAngle: Double? { skin.rotors?.shownAngle }
     var flowProbes: [LoopSet.Probe] { skin.flow?.probes ?? [] }
+    /// The all-speed wave (Dot Grid): running, its loops, and what is shown.
+    var isWaving: Bool { skin.vitality?.isRunning ?? false }
+    var vitalityProbes: [LoopSet.Probe] { skin.vitality?.probes ?? [] }
     /// How the control is drawn. Presentation only (see the type comment).
     var style: SliderStyle = .channel {
         didSet {
@@ -177,6 +183,17 @@ final class PercentSlider: NSControl {
         let spins = RotorMotion.spins(visible: visible, enabled: isEnabled, available: !isUnavailable, rpm: measuredRPM, effects: effects)
         skin.spinRotors(at: spins ? RotorMotion.revolutionsPerSecond(rpm: measuredRPM) : 0)
         skin.setFlow(IceFlow.runs(visible: visible, enabled: isEnabled, available: !isUnavailable, frozen: skin.isIceFormed, effects: effects))
+        // The wave follows the actual fan at every speed. Hidden: frozen as it
+        // was. Shown but stopped (stale, disabled, 0 RPM, Off, Reduce
+        // Motion): frozen and faded out.
+        let fraction = DotVitality.fraction(rpm: measuredRPM, maximumRPM: maximumRPM)
+        if !visible {
+            skin.setVitality(velocity: 0, amplitude: nil)
+        } else if DotVitality.runs(visible: visible, enabled: isEnabled, available: !isUnavailable, rpm: measuredRPM, maximumRPM: maximumRPM, effects: effects) {
+            skin.setVitality(velocity: DotVitality.velocity(fraction: fraction), amplitude: DotVitality.amplitude(fraction: fraction, effects: effects))
+        } else {
+            skin.setVitality(velocity: 0, amplitude: 0)
+        }
     }
 
     /// Horizontal position of a value inside a slider of the given width and

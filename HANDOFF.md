@@ -4,13 +4,15 @@ Updated 2026-10-23. Public repository: https://github.com/kirniy/aervane. Native
 
 ## Current work
 
-Version 0.3.0 is published on GitHub and Homebrew; the public upgrade was verified. The final Mac suite passed **257 tests**, including actual presentation-layer motion over time, rotor RPM scaling, full-cooling flow, reopen, and temperature-transition behavior. The signed archive passed Apple notarization and stapled-ticket validation.
+Version 0.3.0 remains the public GitHub/Homebrew release. Version 0.4.0 is implemented and installed locally; publication is being prepared with refreshed actual-app media.
 
-Dot Grid is the default for new or invalid preferences; saved choices remain. Dot Grid has no fan graphics. Channel rotors follow actual measured RPM at a proportional visual scale. Both styles have continuous maximum-cooling effects. Temperature uses rounded tabular digits and a short crossfade rather than pushing the whole number.
+Actual Claude implemented the all-speed Dot Grid wave, editable Smart target on the graph, inline first-run flow, and discoverable keyboard hints. Parent integration added independent fan/temperature reads, approval retry recovery, verified Auto before hiding fan controls, stable layouts through transient fan failures, and paused hidden onboarding motion. No new runtime dependencies or per-frame application loops.
 
-The static-animation complaint was traced to system Reduce Motion=true. At the user's explicit request it was disabled through System Settings and read back as false; Reduce Transparency remains on. Other users' accessibility settings remain respected. Dot Grid below 100% currently has interaction motion only; all-speed vitality and onboarding are proposals, not shipped features.
+The latest Mac suite passed **300 tests** on Xcode 27.1, including compositor motion and Smart-target drag/keyboard/Accessibility tests. The signed 0.4.0 bundle was installed after normal quit and an independent Auto readback. Live graph dragging, bracket keys, Accessibility target updates, onboarding replay and Temperature-only restoration have passed on the installed app. Auto was independently read back. Actual panel/onboarding/settings captures and a 30-frame motion clip replace prior media.
 
-Actual Claude collaborated via claude-vps; source was reviewed, tested and signed locally. No signing credentials were sent remotely. Final notarization: b67b970a-0834-4a43-b410-4c87cb41320f. Final archive SHA-256:3b6f6b21e31ea37a1d7b140dd2558cd403f77a5897ea8b6b8411ef7ac3705018. Never publish intermediate archives.
+A reported menu-bar/panel mismatch was caused by different sources: selected CPU average in the menu bar versus Smart's CPU peak in the panel. Both now use the same TemperatureReadout, including units, freshness and accessible source description. Auto/Manual still honor the saved sensor preference. The installed Smart panel correctly shows CPU PEAK; menu-bar formatting now has a regression test against the identical model readout, including a 68°C average / 74°C peak fixture. The app-window UI capture does not include the desktop menu-bar item.
+
+System Reduce Motion was disabled at the user's explicit request in the prior session; Reduce Transparency remains enabled. Respect other users' accessibility preferences.
 
 ## Persistent product requirements
 
@@ -62,6 +64,6 @@ This Mac’s existing Gatekeeper global configuration reports `override=security
 ## Follow-up verification
 
 - Public release/tap/CI evidence belongs in docs/distribution.md. Current real app images and Dot Grid animation are in docs/assets.
-- Finish local work with Manual 76%, SmartOFF, ReturnToAutoOFF. Preserve latest saved target (last observed 72°C); user actively changes settings.
+- Finish local work with Manual 76%, SmartOFF, ReturnToAutoOFF. Preserve latest saved target (last observed 70°C); user actively changes settings.
 - Physical dragging was user-confirmed. Broader crash/sleep/wake/watchdog, fanless/multi-fan models, VoiceOver, 1× and multi-display checks remain incomplete. Unit tests do not establish hardware coverage.
 - Read temperature independently of fan failures before claiming temperature-only support on fanless/unsupported models. The current release is physically verified only on the M4 mini.

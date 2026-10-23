@@ -334,6 +334,54 @@ enum IceFlow {
     static func strength(effects: EffectsProfile) -> Double { max(0, min(1, effects.ambient)) * (0.5 + 0.5 * max(0, min(1, effects.frost))) }
 }
 
+/// The Dot Grid's life at every speed: a soft wave of light travelling
+/// through the lit dots from the floor toward the handle, paced by the fan's
+/// *actual* speed (measured RPM over the firmware maximum, never the request
+/// or Smart's target). A fan spinning up visibly quickens the wave; a stopped
+/// fan, or no fresh telemetry, stands it still. Frost stays reserved for
+/// 100%.
+///
+/// Scale (M4 mini, 1000–4900 RPM): `velocity = 6 + 104 × fraction` points per
+/// second, so the firmware idle (≈20%) drifts at ≈27 pt/s, 60% at ≈68 pt/s
+/// and full speed at 110 pt/s. Amplitude grows with speed (more expressive
+/// when the fan works hard). Subtle keeps the same pace, at half the
+/// amplitude: effects change presence, never the truth about speed.
+enum DotVitality {
+    /// Light band spacing (points); one band passes per `period / velocity`.
+    static let period: CGFloat = 96
+    static let slowest = 6.0, span = 104.0
+    /// Relative velocity change below which the wave is not re-timed (RPM
+    /// jitter between samples is not news).
+    static let retimeTolerance = 0.04
+
+    /// Measured RPM as a fraction of the maximum, 0 when unknown or invalid.
+    static func fraction(rpm: Double?, maximumRPM: Double?) -> Double {
+        guard let rpm, let maximumRPM, rpm.isFinite, maximumRPM.isFinite, rpm > 0, maximumRPM > 0 else { return 0 }
+        return min(1, rpm / maximumRPM)
+    }
+    /// Points per second along the track, 0 for a stopped fan.
+    static func velocity(fraction: Double) -> Double {
+        guard fraction.isFinite, fraction > 0 else { return 0 }
+        return slowest + span * min(1, fraction)
+    }
+    /// Opacity of the wave, 0...1: brighter as the fan works harder; half on
+    /// Subtle; nothing with Effects Off or Reduce Motion.
+    static func amplitude(fraction: Double, effects: EffectsProfile) -> Double {
+        guard fraction.isFinite, fraction > 0, effects.ambient > 0 else { return 0 }
+        let presence = effects.ambient >= 1 ? 1.0 : 0.5
+        return (0.38 + 0.62 * min(1, fraction)) * presence
+    }
+    /// Runs only while shown, enabled, fresh, turning and allowed to move.
+    static func runs(visible: Bool, enabled: Bool, available: Bool, rpm: Double?, maximumRPM: Double?, effects: EffectsProfile) -> Bool {
+        visible && enabled && available && effects.ambient > 0 && velocity(fraction: fraction(rpm: rpm, maximumRPM: maximumRPM)) > 0
+    }
+    /// Whether a new velocity is different enough to re-time the wave.
+    static func needsRetime(current: Double, target: Double) -> Bool {
+        guard current > 0 else { return target > 0 }
+        return abs(target - current) / current > retimeTolerance
+    }
+}
+
 /// How much of the track the full-cooling ice covers, by position (0 at
 /// the start of the track, 1 at its end). At 100% the whole track freezes:
 /// the ice is thickest at the thumb end and never thinner than `edge`, so

@@ -87,6 +87,27 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(model.temperatureText, "—")
         XCTAssertNotNil(model.error)
     }
+    func testMenuBarAndPanelShareSmartReadoutAndUnit() {
+        let model = model(smart: true)
+        model.acceptTelemetry(reader().read(wantsGPU: false), sensor: "CPU")
+        XCTAssertEqual(model.displayTemperature, 68)
+        // Smart can evaluate telemetry without permission to command hardware.
+        // Both surfaces must show its peak, never substitute the average.
+        XCTAssertEqual(model.temperatureText, "74")
+        XCTAssertEqual(model.temperatureText, model.panelReadout.text(fahrenheit: false))
+        model.fahrenheit = true
+        XCTAssertEqual(model.temperatureText, model.panelReadout.text(fahrenheit: true))
+        model.chooseAutomatic()
+        XCTAssertFalse(model.smartEnabled)
+        XCTAssertEqual(model.temperatureText, "154")
+        XCTAssertEqual(model.temperatureText, model.panelReadout.text(fahrenheit: true))
+    }
+    func testMenuBarAndPanelBothHideStaleReadings() {
+        let model = model()
+        model.acceptTelemetry(reader().read(wantsGPU: false, at: Date().addingTimeInterval(-20)), sensor: "CPU")
+        XCTAssertEqual(model.temperatureText, "—")
+        XCTAssertEqual(model.temperatureText, model.panelReadout.text(fahrenheit: false))
+    }
     func testUnrequestedGPUIsNotRead() {
         var source = reader()
         source.gpu = { XCTFail("Unrequested optional GPU should not be read"); return 90 }

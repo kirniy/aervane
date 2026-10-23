@@ -33,6 +33,12 @@ import QuartzCore
     /// The frozen lattice's flow: light waves and two twinkle sets.
     private let flowBox = CALayer(), shimmer = CALayer(), shimmerMask = CAGradientLayer(), twinkleA = CALayer(), twinkleB = CALayer()
     private let loops = LoopSet()
+    /// The all-speed wave: the lit dots brightened, seen through soft bands
+    /// that travel from the floor toward the handle at the fan's actual pace
+    /// (`DotVitality`). One cached bitmap, one scrolling gradient mask.
+    private let pulse = CALayer(), pulseMask = CAGradientLayer()
+    private let wave = LoopSet()
+    private var waveVelocity = 0.0
     private let frost = CALayer(), frostMask = CALayer()
     private let floorTick = CALayer(), measuredMark = CALayer(), halo = CAGradientLayer()
     private let crown = CALayer(), crownMask = CAGradientLayer()
@@ -79,7 +85,12 @@ import QuartzCore
         // handle; it lives inside the lit layer so it can never light dots
         // ahead of the value. The lens lives there too.
         sparkDots.mask = headMask
-        litDots.addSublayer(sparkDots); litDots.addSublayer(swell)
+        litDots.addSublayer(sparkDots); litDots.addSublayer(pulse); litDots.addSublayer(swell)
+        pulse.mask = pulseMask; pulseMask.anchorPoint = .zero
+        pulseMask.startPoint = CGPoint(x: 0, y: 0.5); pulseMask.endPoint = CGPoint(x: 1, y: 0.5)
+        // Base timing: one band period per second at 100 pt/s; the pace
+        // given to `start` turns that into the fan's measured velocity.
+        wave.scroll(pulseMask, period: DotVitality.period, duration: Double(DotVitality.period) / Self.waveBase, direction: 1)
         swell.mask = swellMask
         swellMask.type = .radial; swellMask.startPoint = CGPoint(x: 0.5, y: 0.5); swellMask.endPoint = CGPoint(x: 1, y: 1)
         swellMask.colors = [NSColor.black.cgColor, NSColor.black.withAlphaComponent(0.6).cgColor, NSColor.clear.cgColor]
@@ -112,10 +123,32 @@ import QuartzCore
         tilt.addSublayer(thumbBody); tilt.addSublayer(thumbFrost)
         thumb.addSublayer(tilt)
         dimDots.opacity = 0.82
-        for layer in [sparkDots, swell, frost, halo, crown, crownGlint, measuredMark, bloom, thumbFrost] { layer.opacity = 0 }
-        for layer in [tray, dimDots, litDots, sparkDots, swell, frost, crown, crownGlint, bloom, thumbBody, thumbFrost, shimmer, twinkleA, twinkleB] { layer.contentsGravity = .resize }
+        for layer in [sparkDots, pulse, swell, frost, halo, crown, crownGlint, measuredMark, bloom, thumbFrost] { layer.opacity = 0 }
+        for layer in [tray, dimDots, litDots, sparkDots, pulse, swell, frost, crown, crownGlint, bloom, thumbBody, thumbFrost, shimmer, twinkleA, twinkleB] { layer.contentsGravity = .resize }
     }
     override var flow: LoopSet? { loops }
+    override var vitality: LoopSet? { wave }
+    /// Points per second the wave's base timing represents.
+    private static let waveBase = 100.0
+
+    override func setVitality(velocity: Double, amplitude: Double?) {
+        if velocity > 0, velocity.isFinite {
+            // Re-time only for a real change of pace; `start` freezes the
+            // running scroll where it is and continues at the new pace.
+            if !wave.isRunning || DotVitality.needsRetime(current: waveVelocity, target: velocity) {
+                wave.start(pace: Self.waveBase / velocity); waveVelocity = velocity
+            }
+        } else {
+            wave.freeze(); waveVelocity = 0
+        }
+        guard let amplitude else { return }
+        let target = Float(max(0, min(1, amplitude)))
+        guard abs(pulse.opacity - target) > 0.03 || (target == 0) != (pulse.opacity == 0) else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // A fan spinning up brightens the wave over about one sample.
+        change(pulse, "opacity", animated: effects.animates && window != nil, duration: 0.8, timing: Theme.Ease.inOut) { pulse.opacity = target }
+        CATransaction.commit()
+    }
 
     override var layers: [CALayer] { [tray, dimDots, litDots, frost, halo, crown, crownGlint, floorTick, measuredMark, bloom, thumb] }
     override var allLayers: [CALayer] {
@@ -213,6 +246,17 @@ import QuartzCore
             self.sparkDots.contents = Self.bitmap(grid.size, scale: scale) { ctx in
                 ctx.setFillColor((dark ? NSColor.white : high).cgColor)
                 for (c, _, p) in lattice { Self.dot(ctx, at: p, size: litSize(columnPercent(c)) + 0.3) }
+            }
+            // The wave: every dot lit from within, a soft cold glow around a
+            // bright core, toned by its column; the travelling mask shows it
+            // only where a band passes.
+            self.pulse.contents = Self.bitmap(grid.size, scale: scale) { ctx in
+                for (c, _, p) in lattice {
+                    let v = columnPercent(c), size = litSize(v)
+                    Self.radial(ctx, lit(max(v, 30)).withAlphaComponent(dark ? 0.55 : 0.45).cgColor, at: p, radius: size * 1.25)
+                    ctx.setFillColor((dark ? NSColor.white : high).withAlphaComponent(dark ? 0.95 : 0.85).cgColor)
+                    Self.dot(ctx, at: p, size: size * 0.82)
+                }
             }
             // The lens: the same dots larger and brighter, with a full cap.
             self.swell.contents = Self.bitmap(grid.size, scale: scale) { ctx in
@@ -407,7 +451,7 @@ import QuartzCore
             self.measuredMark.backgroundColor = Theme.ink.withAlphaComponent(dark ? 0.6 : 0.5).cgColor
             self.floorTick.backgroundColor = Theme.ink.withAlphaComponent(dark ? 0.4 : 0.32).cgColor
         }
-        for layer in [tray, dimDots, litDots, sparkDots, swell, frost, crown, crownGlint, bloom, thumbBody, thumbFrost, shimmer, twinkleA, twinkleB] { layer.contentsScale = scale }
+        for layer in [tray, dimDots, litDots, sparkDots, pulse, swell, frost, crown, crownGlint, bloom, thumbBody, thumbFrost, shimmer, twinkleA, twinkleB] { layer.contentsScale = scale }
         tray.frame = trayFrame
         dimDots.frame = grid; litDots.frame = grid
         dimMask.bounds = CGRect(x: 0, y: 0, width: grid.width, height: grid.height); dimMask.position = CGPoint(x: grid.width, y: grid.height / 2)
@@ -415,6 +459,27 @@ import QuartzCore
         sparkDots.frame = CGRect(origin: .zero, size: grid.size)
         headMask.bounds = CGRect(x: 0, y: 0, width: Metric.head, height: grid.height)
         swell.frame = CGRect(origin: .zero, size: grid.size)
+        // The wave's mask: soft bands every period, tileable, resting one
+        // period left of the lattice so a rightward scroll always covers it.
+        pulse.frame = CGRect(origin: .zero, size: grid.size)
+        let waving = wave.isRunning
+        if waving { wave.freeze() }
+        let wavePeriod = DotVitality.period, waveReach = grid.width + 3 * wavePeriod
+        pulseMask.bounds = CGRect(x: 0, y: 0, width: waveReach, height: grid.height); pulseMask.position = CGPoint(x: -wavePeriod, y: 0)
+        wave.setRest(pulseMask, x: -wavePeriod)
+        var bandColors: [CGColor] = [], bandStops: [NSNumber] = []
+        var waveBand: CGFloat = wavePeriod / 2
+        while waveBand < waveReach {
+            // A broad soft crest with a brighter core, then darkness.
+            for (dx, a) in [(-wavePeriod / 2, 0.0), (-26, 0.0), (-12, 0.45), (0, 1.0), (10, 0.5), (22, 0.0)] as [(CGFloat, CGFloat)] {
+                let location = (waveBand + dx) / waveReach
+                guard location >= 0, location <= 1, (bandStops.last?.doubleValue ?? -1) < Double(location) else { continue }
+                bandColors.append(NSColor.black.withAlphaComponent(a).cgColor); bandStops.append(NSNumber(value: Double(location)))
+            }
+            waveBand += wavePeriod
+        }
+        pulseMask.colors = bandColors; pulseMask.locations = bandStops
+        if waving { wave.start(pace: wave.currentPace) }
         swellMask.bounds = CGRect(origin: .zero, size: Metric.lens)
         frost.frame = grid.insetBy(dx: 0, dy: -Metric.frostFringe)
         frostMask.bounds = CGRect(x: 0, y: 0, width: 0, height: frost.bounds.height); frostMask.position = CGPoint(x: 0, y: frost.bounds.height / 2)

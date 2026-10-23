@@ -9,6 +9,8 @@ import ZephyrCore
 /// see these: a field editor consumes its own keys before the panel does.
 enum QuickAction: Equatable {
     case preset(Int), automatic, smart, manual, settings
+    /// Smart's target, in display steps: [ and ] by one, { and } by five.
+    case smartTarget(Int)
 
     /// Physical top-row and keypad keys 1–6, so layouts that need Shift for
     /// digits (AZERTY) still reach presets by position.
@@ -24,6 +26,10 @@ enum QuickAction: Equatable {
         }
         if let index = digitKeyCodes[keyCode] { return index < presetCount ? .preset(index) : nil }
         switch key {
+        case "[": return .smartTarget(-1)
+        case "]": return .smartTarget(1)
+        case "{": return .smartTarget(-5)
+        case "}": return .smartTarget(5)
         case "a": return .automatic
         case "s": return .smart
         case "m": return .manual
@@ -243,5 +249,55 @@ enum SmartStatusText {
             text += " in response to recent heat"
         }
         return text
+    }
+}
+
+/// The trend's vertical scale: the recent samples with a little air, and
+/// Smart's target when it is shown, so the target line is always on the
+/// plot. Without a target this is exactly the original scale.
+enum TrendScale {
+    static func range(samples: [Double], target: Double?) -> (low: Double, high: Double) {
+        let finite = samples.filter(\.isFinite)
+        var lowest = finite.min() ?? 30, highest = finite.max() ?? 60
+        if let target, target.isFinite { lowest = min(lowest, target); highest = max(highest, target) }
+        let low = max(10, lowest - 3)
+        return (low, max(low + 6, highest + 3))
+    }
+    /// A temperature's height in a plot spanning `minY…minY + height`
+    /// (y up), clamped to the plot.
+    static func y(_ celsius: Double, range: (low: Double, high: Double), minY: Double, height: Double) -> Double {
+        guard range.high > range.low, celsius.isFinite else { return minY }
+        let t = max(0, min(1, (celsius - range.low) / (range.high - range.low)))
+        return minY + t * height
+    }
+}
+
+/// Dragging Smart's target on the trend. The mapping is fixed for the whole
+/// gesture: every `pointsPerStep` of vertical travel is one whole degree in
+/// the user's unit, clamped to Smart's range, and the chart keeps the scale
+/// it had at the grab, so nothing rescales under the pointer. Nothing is
+/// stored until the gesture ends.
+struct SmartTargetScrub: Equatable {
+    static let pointsPerStep = 4.0
+    /// The target at the grab, in whole display degrees.
+    let start: Int
+    let fahrenheit: Bool
+
+    init(celsius: Double, fahrenheit: Bool) {
+        self.start = SmartTarget.display(celsius, fahrenheit: fahrenheit); self.fahrenheit = fahrenheit
+    }
+    /// Display degrees after `travel` points of upward pointer movement
+    /// (negative is downward).
+    func display(travel: Double) -> Int {
+        guard travel.isFinite else { return start }
+        let range = SmartTarget.displayRange(fahrenheit: fahrenheit)
+        return min(range.upperBound, max(range.lowerBound, start + Int((travel / Self.pointsPerStep).rounded())))
+    }
+    func celsius(travel: Double) -> Double { SmartTarget.celsius(fromDisplay: Double(display(travel: travel)), fahrenheit: fahrenheit) }
+    /// One keyboard or VoiceOver step (whole display degrees), clamped.
+    static func stepped(_ celsius: Double, by steps: Int, fahrenheit: Bool) -> Double {
+        let range = SmartTarget.displayRange(fahrenheit: fahrenheit)
+        let shown = min(range.upperBound, max(range.lowerBound, SmartTarget.display(celsius, fahrenheit: fahrenheit) + steps))
+        return SmartTarget.celsius(fromDisplay: Double(shown), fahrenheit: fahrenheit)
     }
 }

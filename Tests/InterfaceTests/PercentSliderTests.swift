@@ -454,7 +454,8 @@ import XCTest
     }
 
     /// Switching style never commands the fan. Only the Channel has rotors;
-    /// the Dot Grid has no fan graphics and no repeating motion below 100%.
+    /// the Dot Grid has no fan graphics (its all-speed wave needs the fan's
+    /// maximum RPM and is covered by `DotVitalityProgressionTests`).
     func testRotorsBelongToTheChannelAndStyleSwitchNeverCommands() {
         let (window, control) = hostedSlider(); _ = window
         var commits: [Double] = []

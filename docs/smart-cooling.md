@@ -85,7 +85,7 @@ While Smart is selected, the panel's figure, its heat colour, the glass tint and
 
 If Smart has no fresh measurement (none yet, more than 12 s old, or no valid CPU reading), the figure shows "—". It never falls back to an average.
 
-Smart's chart has its own history, which starts when Smart is chosen. Auto and Manual return to the selected sensor, tagged CPU AVG, GPU AVG, or WARMER (the warmer of the two averages), with that sensor's own history, so the two series never mix. **The menu bar always shows the selected sensor**, whatever the mode.
+Smart's chart has its own history, which starts when Smart is chosen. Auto and Manual return to the selected sensor, tagged CPU AVG, GPU AVG, or WARMER (the warmer of the two averages), with that sensor's own history, so the two series never mix. **The menu bar shares the panel’s source**: Smart’s controlling sensor in Smart, and the selected sensor in Auto or Manual.
 
 The reported old panel could therefore show “68 MAX” while Smart saw a much hotter CPU core. The old MAX tag described the warmer average, not the hottest core. The corrected Smart panel shows the controlling reading directly; Auto/Manual now use explicit average-source tags.
 
@@ -161,3 +161,11 @@ The pure tests run on Linux and macOS. The integrated regulation checkpoint pass
 The signed 0.3.0 regulation checkpoint ran Smart with a target of **86°C** on the M4 Mac mini. A 13-sample independent read-only trace over 36 seconds recorded hottest CPU readings of **83.6–86.4°C** while commanded speed fell **80 → 76 → 71%**. Hardware targets read 3920, 3724 and 3479 RPM respectively; measured speed followed as the rotor decelerated. The native Smart slider visibly moved with these updates. This verifies that the corrected controller does not remain at full speed around that working target; it is one short trace on one machine, not a thermal guarantee.
 
 Auto from Smart read mode0 and target1000 RPM. A slider adjustment from Smart to76% selected Manual immediately and read mode1, target3724 and actual3725 RPM. Celsius/Fahrenheit target conversion and a three-digit CPU PEAK header were rendered on the installed app. Physical pointer dragging and immediate Smart-to-Manual takeover were separately confirmed by the user; the UI automation tool did not perform that physical drag.
+
+## Adjust the goal where you see the temperature
+
+While Smart is active, the trend includes a dashed target line and a temperature handle. Drag either vertically; release to save. The mapping remains fixed during the gesture, even as new readings arrive. Closing the panel cancels an unfinished adjustment. Settings stays synchronized.
+
+`[` and `]` adjust the goal by one degree in the selected unit; shifted brackets adjust by five. Accessibility clients can read, set, increment and decrement the numeric target. Editing the target never enables Smart on its own. Hold ⌘ in the main panel to reveal the available shortcuts.
+
+The menu-bar number and panel number use the same source. In Smart, both show Smart’s controlling temperature (CPU peak, or a hotter available GPU). Auto and Manual restore the chosen display sensor. The source is also named in the menu-bar tooltip and accessibility value.

@@ -17,25 +17,33 @@ A native Mac menu-bar utility with CPU temperature at a glance, direct percentag
 brew install --cask kirniy/tap/aervane
 ```
 
-Apple Silicon · macOS 14+ · Developer ID signed and notarized. Open Aervane from Applications. On the first fan adjustment, macOS asks you to approve its embedded helper. Temperature monitoring works before setup.
+Apple Silicon · macOS 14+ · Developer ID signed and notarized. Open Aervane from Applications. The first launch opens a short introduction in the menu-bar panel. Choose temperature monitoring alone, or preview the fan controls and explicitly set up the signed helper. [First-run guide](docs/first-run.md).
 
 Fan control is physically verified on the **M4 Mac mini (Mac16,10)**. Other models remain unverified; this release supports one fan. High temperature alone does not block manual control.
 
 <p align="center">
-  <img src="docs/assets/menu-bar-preview.png" alt="Aervane running on macOS: temperature, manual 100% cooling, an icy slider, and inline presets" width="344">
+  <img src="docs/assets/menu-bar-preview.png" alt="Aervane running on macOS: Smart cooling with its target on the graph, a live dot-grid slider, and inline presets" width="344">
 </p>
-<p align="center"><sub>Aervane 0.3.0 at 100% cooling. Dark appearance; Reduce Transparency enabled.</sub></p>
+<p align="center"><sub>Aervane 0.4.0 in Smart mode. Dark appearance; Reduce Transparency enabled.</sub></p>
 
 - A compact glass panel, heat-colored readings, Dot Grid by default, and an optional Cooling Channel. Cooling effects grow with speed.
-- Adjustable menu-bar content, spacing, slider style and effects. Channel’s miniature fans follow measured RPM; Dot Grid keeps its continuous dot pattern. Motion stops when the panel closes.
-- Editable presets, temperature-history inspection, and keyboard controls. Temperature changes use a short crossfade with stable-width digits.
-- Auto · Smart · Manual. [Smart cooling](docs/smart-cooling.md) works toward a temperature you choose: it anticipates rising heat and adjusts cooling around the target, easing as temperatures fall through a small deadband. It can't guarantee a cap under every load.
+- Adjustable menu-bar content, spacing, slider style and effects. Channel’s miniature fans follow measured RPM; Dot Grid carries a light wave at every nonzero measured speed. Motion stops when the panel closes.
+- Editable presets, temperature-history inspection, and keyboard controls. Hold ⌘ to reveal the shortcuts. Temperature changes use a short crossfade with stable-width digits.
+- Auto · Smart · Manual. [Smart cooling](docs/smart-cooling.md) works toward a temperature you choose: it anticipates rising heat and adjusts cooling around the target, easing as temperatures fall through a small deadband. Drag the target directly on the graph, or adjust it with `[` and `]`. It can't guarantee a cap under every load.
+- Temperature-only mode with no helper setup. A failed fan read does not erase valid temperature readings.
 - Manual control without a time limit by default. An optional 5–120 minute timer lives in Settings.
 
 <details>
 <summary>Dot Grid · live motion</summary>
 <p align="center">
-  <img src="docs/assets/dot-grid-motion.gif" alt="Actual Aervane 0.3.0 capture: Dot Grid forming ice and flowing at maximum cooling" width="344">
+  <img src="docs/assets/dot-grid-motion.gif" alt="Actual Aervane 0.4.0 capture: Dot Grid flowing below maximum cooling" width="344">
+</p>
+</details>
+
+<details>
+<summary>First launch</summary>
+<p align="center">
+  <img src="docs/assets/onboarding-preview.png" alt="Aervane inline introduction: live readings, Control the fan, or Temperature only" width="344">
 </p>
 </details>
 

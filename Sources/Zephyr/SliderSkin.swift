@@ -59,7 +59,7 @@ enum ThumbGesture { case settle, grab, release }
     /// A user action reached 100% (the control already played the haptic).
     func celebrate(animated: Bool, delay: CFTimeInterval) {}
 
-    func settle() { rotors?.freeze(); setFlow(false); allLayers.forEach { $0.removeAllAnimations() } }
+    func settle() { rotors?.freeze(); setFlow(false); setVitality(velocity: 0, amplitude: nil); allLayers.forEach { $0.removeAllAnimations() } }
     func uninstall() { settle(); layers.forEach { $0.removeFromSuperlayer() } }
     /// Spins the rotors at `rps` revolutions per second, or freezes them
     /// in place (0). Called by the control whenever visibility, effects,
@@ -67,6 +67,13 @@ enum ThumbGesture { case settle, grab, release }
     func spinRotors(at rps: Double) { if rps > 0 { rotors?.spin(at: rps) } else { rotors?.freeze() } }
     /// The style's continuous full-cooling motion, if it has any.
     var flow: LoopSet? { nil }
+    /// The style's all-speed wave, paced by the fan's actual speed, if it has
+    /// one (`DotVitality`).
+    var vitality: LoopSet? { nil }
+    /// Runs the wave at `velocity` points per second with `amplitude`
+    /// opacity, re-timing phase-continuously; velocity 0 freezes it in place.
+    /// A nil amplitude keeps the current one (hidden: frozen as it was).
+    func setVitality(velocity: Double, amplitude: Double?) {}
     /// Runs (or freezes in place) the full-cooling flow. The control decides
     /// when (`IceFlow.runs`); the skin only plays it at the effects' pace.
     func setFlow(_ running: Bool) {

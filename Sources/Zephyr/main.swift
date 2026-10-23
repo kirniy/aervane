@@ -30,7 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         installKeyboardCommands()
-        model = AppModel(); content = PanelView(model: model)
+        // The introduction's state is read before the model can store
+        // anything, so a first launch is told apart from an existing user
+        // (saved preferences or a registered helper never see it by themselves).
+        let helperStatus = HelperInstaller().status
+        let onboarding = OnboardingFlow(store: OnboardingStore(), helperRegistered: helperStatus == .enabled || helperStatus == .requiresApproval)
+        model = AppModel(); content = PanelView(model: model, onboarding: onboarding)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
             button.target = self; button.action = #selector(toggle); button.font = statusFont
@@ -67,6 +72,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             })
         }
         if CommandLine.arguments.contains("--show") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.show() } }
+        // First launch only: the panel opens once by itself under its item,
+        // so a menu-bar-only app never looks like it did nothing. Never again.
+        else if onboarding.shouldShowOnLaunch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard onboarding.shouldShowOnLaunch else { return }
+                onboarding.didShowOnLaunch(); self?.show()
+            }
+        }
         if CommandLine.arguments.contains("--enable-helper") { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.show(); self.model.enableControl() } }
     }
     private func refresh() { updateStatusItem(); if panel.isVisible { content.update() } }
@@ -76,13 +89,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItem() {
         guard let button = item.button else { return }
         let prefs = PresentationPreferences.shared, display = prefs.menuBarContent
-        let title = StatusItemLayout.title(temperatureText: model.temperatureText)
+        let readout = model.panelReadout
+        let temperatureText = readout.text(fahrenheit: model.fahrenheit)
+        let title = StatusItemLayout.title(temperatureText: temperatureText)
         let attributes: [NSAttributedString.Key: Any] = [.font: statusFont]
         let titleWidth = max((title as NSString).size(withAttributes: attributes).width,
                              (StatusItemLayout.reservedTitle as NSString).size(withAttributes: attributes).width)
         button.image = display.showsIcon ? statusIcon : nil
         button.imagePosition = display == .icon ? .imageOnly : display == .temperature ? .noImage : .imageLeading
-        statusThermal = model.stale ? .unknown : ThermalState.classify(model.displayTemperature, previous: statusThermal)
+        statusThermal = readout.celsius == nil ? .unknown : ThermalState.classify(readout.celsius, previous: statusThermal)
         if display.showsTemperature {
             // Hot readings may carry their heat colour; otherwise the system
             // label colour keeps menu bar vibrancy and highlight inversion.
@@ -95,9 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else { button.title = "" }
         item.length = CGFloat(StatusItemLayout.length(content: display, spacing: prefs.menuBarSpacing,
                                                       iconWidth: Double(statusIcon.size.width), titleWidth: Double(titleWidth)))
-        let sensor = model.selectedSensor == "Warmer" ? "Warmer of CPU and GPU averages" : model.selectedSensor
-        button.toolTip = "\(sensor) \(model.temperatureText)\(model.temperatureUnit)"
-        button.setAccessibilityValue("\(sensor) \(model.temperatureText)\(model.temperatureUnit)")
+        let sensor = readout.detail
+        button.toolTip = "\(sensor) \(temperatureText)\(model.temperatureUnit)"
+        button.setAccessibilityValue("\(sensor) \(temperatureText)\(model.temperatureUnit)")
     }
 
     /// The panel material, pointer included, carries a faint heat tint when

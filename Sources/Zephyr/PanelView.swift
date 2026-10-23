@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import ZephyrCore
 
 /// One compact glass panel. Frames come from a single `arrange` pass on a
@@ -13,8 +14,14 @@ import ZephyrCore
 /// cold air up from the lower edge; the cooling command frosts the slider.
 ///
 /// Keyboard: arrows adjust the slider, 1–6 apply presets, A restores Auto,
-/// S selects Smart, M takes manual control, and ⌘, toggles Settings. In the
-/// preset editor Return saves and Escape cancels. Text fields keep their keys.
+/// S selects Smart, M takes manual control, [ and ] move Smart's target (⇧
+/// by five), and ⌘, toggles Settings. Holding ⌘ shows these keys on the
+/// controls. In the preset editor Return saves and Escape cancels. Text
+/// fields keep their keys.
+///
+/// First launch shows a short introduction in place of the fan section
+/// (`Onboarding`): the fan as it is, then a choice between controlling it and
+/// only reading the temperature. Without a fan there is nothing to choose.
 final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     static let width: CGFloat = 344
     let model: AppModel
@@ -22,12 +29,22 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     var quit: (() -> Void)?
     /// Called when the temperature band changes (the window tints its glass).
     var thermalChanged: ((ThermalState) -> Void)?
-    var preferredFirstResponder: NSView { slider }
+    var preferredFirstResponder: NSView {
+        if settingsOpen || section == .temperatureOnly { return self }
+        return section == .welcome ? welcomeCard.controlButton : slider
+    }
     private(set) var thermal = ThermalState.unknown
     /// Which history the hero and chart show, to restart the heat band's
     /// hysteresis when the source changes.
     private var shownSeries = TemperatureReadout.Series.selected
-    private var needsSetup: Bool { !model.helperReady || model.competingApp != nil }
+    /// The introduction and the remembered fan choice (temperature only, or
+    /// full control).
+    let onboarding: OnboardingFlow
+    private var section: Onboarding.Section { onboarding.state.section(fanAvailable: model.offersFanControls) }
+    private var setupStage: Onboarding.Card { onboarding.state.card(helperReady: model.helperReady, fanAvailable: model.fanAvailable) }
+    /// The Set Up button: only in the fan section, never while the setup card
+    /// already says what to do.
+    private var needsSetup: Bool { model.fanAvailable && section == .fan && setupStage == .none && (!model.helperReady || model.competingApp != nil) }
     /// A policy suggestion is not evidence that the helper applied it.
     private var smartAtMaximum: Bool {
         model.smartEnabled && model.smartSaturated && model.helperReady && model.ownsControl
@@ -63,7 +80,11 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     private lazy var smartButton = SoftButton("Smart") { [weak self] in self?.model.chooseSmart() }
     private lazy var manualButton = SoftButton("Manual") { [weak self] in guard let self else { return }; self.request(self.model.shownPercent, motion: .none) }
     private lazy var modeSwitch = ModeSwitch(auto: autoButton, smart: smartButton, manual: manualButton)
-    private lazy var enableButton = SoftButton("Set up fan control", glyph: .airflow) { [weak self] in self?.model.enableControl() }
+    private lazy var enableButton = SoftButton("Set up fan control", glyph: .airflow) { [weak self] in self?.startSetup() }
+    private lazy var welcomeCard = WelcomeCard(control: { [weak self] in self?.chooseControl() },
+                                               temperatureOnly: { [weak self] in self?.chooseTemperatureOnly() })
+    private let setupCard = SetupCard()
+    private let keyHints = KeyHintsView()
     private var presetButtons: [SoftButton] = []
 
     // Preset editor: works on a draft; Save stores it, Cancel drops it.
@@ -88,15 +109,19 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     }()
     private var settingsOpen = false
     private var layoutKey = ""
+    private var displayedSection: Onboarding.Section?
     /// A value the user asked for that the model has not confirmed yet. Keeps
     /// the thumb from snapping back while the helper write is in flight.
     private var hold: (value: Double, until: Date)?
 
-    init(model: AppModel) {
-        self.model = model; super.init(frame: .init(x: 0, y: 0, width: Self.width, height: 300))
+    init(model: AppModel, onboarding: OnboardingFlow? = nil) {
+        self.model = model
+        let status = HelperInstaller().status
+        self.onboarding = onboarding ?? OnboardingFlow(store: OnboardingStore(), helperRegistered: status == .enabled || status == .requiresApproval)
+        super.init(frame: .init(x: 0, y: 0, width: Self.width, height: 300))
         wantsLayer = true
-        [aura, mark, titleLabel, temperature, unit, sensorTag, chart, settingsButton, fanSection, settingsScroll].forEach(addSubview)
-        [chill, percent, stateChip, modeSwitch, slider, floorLabel, enableButton, message, addButton, cancelButton, saveButton].forEach(fanSection.addSubview)
+        [aura, mark, titleLabel, temperature, unit, sensorTag, chart, settingsButton, fanSection, welcomeCard, settingsScroll, keyHints].forEach(addSubview)
+        [chill, percent, stateChip, modeSwitch, slider, floorLabel, enableButton, setupCard, message, addButton, cancelButton, saveButton].forEach(fanSection.addSubview)
         percent.wantsLayer = true
         fanSection.wantsLayer = true; settingsScroll.wantsLayer = true; settingsScroll.isHidden = true
         temperature.font = TemperatureFigure.font(); temperature.wantsLayer = true
@@ -126,6 +151,23 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         settingsPage.editPresets = { [weak self] in self?.openEditor() }
         settingsPage.quit = { [weak self] in self?.quit?() }
         settingsPage.changed = { [weak self] in self?.update() }
+        settingsPage.fanControls = { [weak self] in self?.onboarding.state.choice != .temperatureOnly }
+        settingsPage.setFanControls = { [weak self] shown in
+            guard let self else { return }
+            if shown { self.onboarding.handle(.fanControls(true)); self.update() }
+            else { self.chooseTemperatureOnly() }
+        }
+        settingsPage.replayIntroduction = { [weak self] in self?.replayIntroduction() }
+        // Smart's target on the trend: stored only when the gesture ends (or
+        // on a key or VoiceOver step); it never turns Smart on.
+        chart.targetCommitted = { [weak self] celsius in
+            guard let self else { return }
+            self.model.setSmartTarget(celsius); self.settingsPage.syncTarget()
+        }
+        setupCard.open = { SMAppService.openSystemSettingsLoginItems() }
+        setupCard.done = { [weak self] in self?.onboarding.handle(.finish); self?.update(); self?.focusControls() }
+        welcomeCard.isHidden = true
+        self.onboarding.changed = { [weak self] in self?.needsLayout = true }
         update()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -136,9 +178,12 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         // Cancel or Escape discards them.
         if editing { saveEditing(focus: false) }
         endTextEditing()
-        slider.prepareForHiding(); chart.endInspection()
+        slider.prepareForHiding(); chart.endInspection(); keyHints.show([])
         for button in allButtons { button.resetHover() }
         settleAnimations(in: layer)
+        // Closing ends the introduction (it never insists) and a finished
+        // setup's card; waiting for approval survives.
+        onboarding.handle(.panelClosed)
     }
     private func settleAnimations(in layer: CALayer?) {
         layer?.removeAllAnimations()
@@ -146,9 +191,10 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         if let mask = layer?.mask { settleAnimations(in: mask) }
     }
     private var allButtons: [SoftButton] {
-        [settingsButton, autoButton, smartButton, manualButton, enableButton, addButton, cancelButton, saveButton] + presetButtons + editorRows.map(\.remove) + settingsPage.buttons
+        [settingsButton, autoButton, smartButton, manualButton, enableButton, addButton, cancelButton, saveButton,
+         welcomeCard.controlButton, welcomeCard.temperatureButton, setupCard.actionButton] + presetButtons + editorRows.map(\.remove) + settingsPage.buttons
     }
-    override func layout() { super.layout(); arrange(apply: true) }
+    override func layout() { super.layout(); arrange(apply: true); keyHints.frame = bounds }
     override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); needsLayout = true }
 
     /// Content settles into the glass as the panel appears.
@@ -159,6 +205,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         drop.fromValue = NSValue(caTransform3D: CATransform3DMakeTranslation(0, 6, 0)); drop.toValue = NSValue(caTransform3D: CATransform3DIdentity)
         drop.duration = drop.settlingDuration
         layer.add(drop, forKey: "entrance")
+        if section == .welcome && !settingsOpen { welcomeCard.playEntrance() }
     }
     /// Re-reads presentation preferences and system accessibility settings.
     func applyPresentation() {
@@ -199,7 +246,9 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         let unitY = (y + (numberFont.ascender - numberFont.capHeight) - (unitFont.ascender - unitFont.capHeight)).rounded()
         put(unit, m - 3 + numberWidth, unitY, 40, 22)
         put(sensorTag, m - 1 + numberWidth, unitY + 21, 64, 13)
-        put(chart, m + w - 124, y + 14 - TemperatureHistory.readoutBand, 124, 40 + TemperatureHistory.readoutBand)
+        // The trend, roomier than the original 124×40 so Smart's target can be
+        // grabbed: 144 wide, its plot as tall as the figure's digits.
+        put(chart, m + w - 144, y + 4, 144, 46 + TemperatureHistory.readoutBand)
         // The aura is centred on the figure; its gradient fills the view, so
         // layer geometry flipping cannot move it.
         put(aura, m + numberWidth / 2 - 150, y + 31 - 95, 300, 190)
@@ -213,6 +262,14 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
             put(settingsScroll, 0, y, bounds.width, shown)
             if apply { settingsPage.frame = NSRect(x: 0, y: 0, width: bounds.width, height: height) }
             return y + shown + 14
+        }
+        switch section {
+        case .welcome:
+            put(welcomeCard, m, y + 2, w, WelcomeCard.height)
+            return y + 2 + WelcomeCard.height + 16
+        case .temperatureOnly:
+            return y + 4
+        case .fan: break
         }
         let top = y; y = 0
         // Section-local coordinates from here.
@@ -254,6 +311,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
             y += CGFloat(rows) * 40 + CGFloat(rows - 1) * gap + 12
         }
         if needsSetup { put(enableButton, m, y, w, 32); y += 32 + 10 }
+        if setupStage != .none { put(setupCard, m, y, w, SetupCard.height); y += SetupCard.height + 10 }
         if model.error != nil || model.smartNotice != nil {
             let height = min(32, max(15, ceil(message.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: w, height: 200)).height ?? 15)))
             put(message, m, y, w, height); y += height + 8
@@ -276,7 +334,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         chart.heatColor = prefs.heatColor
         // Temperature: number, unit, source tag and heat band. While Smart
         // runs this is the measurement Smart regulates; otherwise the
-        // selected sensor (the menu bar always shows the selected sensor).
+        // selected sensor. The menu bar uses the same readout.
         let readout = model.panelReadout
         let sameSeries = readout.series == shownSeries
         if !sameSeries { shownSeries = readout.series; thermal = .unknown }
@@ -300,6 +358,8 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         chart.fahrenheit = model.fahrenheit
         // Each source keeps its own history; switching never mixes them.
         chart.samples = readout.series == .smart ? model.smartHistory : model.history
+        // Smart's target lives on the trend while Smart runs.
+        chart.smartTarget = model.smartEnabled ? model.smartTarget : nil
         chill.apply(level: chillLevel, effects: effects, animated: window?.isVisible == true)
 
         // Fan.
@@ -310,14 +370,15 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         // The Channel's rotors turn with the real fan: hardware RPM, never the
         // request; unknown or stale telemetry stands them still.
         slider.measuredRPM = model.stale ? nil : model.sample?.currentRPM
+        slider.maximumRPM = model.sample?.maximumRPM
         // Settings replaces the fan section; hidden artwork must stop too.
-        slider.ambientActive = model.panelVisible && !settingsOpen
+        slider.ambientActive = model.panelVisible && !settingsOpen && section == .fan
         if let held = hold, !model.busy, abs(model.shownPercent - held.value) < 1.5 || model.error != nil || held.until < Date() { hold = nil }
         // A sample refresh never moves the thumb under the user's pointer/keys.
         if !slider.isInteracting {
             // Stays draggable while a command is in flight: the model queues
             // the newest value instead of dropping input.
-            slider.isEnabled = !model.stale
+            slider.isEnabled = !model.stale && section == .fan && !settingsOpen
             let value = (hold?.value ?? model.shownPercent).rounded()
             if abs(slider.percent - value) >= 0.5 {
                 // Smart moving the fan: a visible, eased glide of the thumb,
@@ -351,19 +412,29 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         settingsButton.selected = settingsOpen
 
         enableButton.isHidden = !needsSetup; enableButton.isEnabled = !model.busy
-        enableButton.title = model.busy && !model.helperReady ? "Connecting…" : model.helperApprovalRequired ? "Approve in System Settings" : model.pendingPercent.map { "Set up & apply \(Int($0.rounded()))%" } ?? "Set up fan control"
+        // Setting up quits a running Macs Fan Control first; the button says
+        // so rather than doing it silently.
+        enableButton.title = model.busy && !model.helperReady ? "Connecting…"
+            : model.competingApp != nil ? "Quit Macs Fan Control & Set Up"
+            : model.helperApprovalRequired ? "Approve in System Settings"
+            : model.pendingPercent.map { "Set up & apply \(Int($0.rounded()))%" } ?? "Set up fan control"
         enableButton.setAccessibilityLabel(enableButton.title)
-        enableButton.toolTip = model.setupMessage
+        enableButton.toolTip = model.competingApp != nil ? "Only one app can control the fan." : model.setupMessage
+        updateIntroduction()
         // A command error first; otherwise why Smart stopped, kept until the
         // next mode choice so an unexpected change is explained.
-        let note = model.error ?? model.smartNotice
+        let note = model.error ?? model.smartNotice ?? (model.hasDetectedFan && !model.fanAvailable ? "Fan reading unavailable" : nil)
         message.stringValue = note ?? ""; message.isHidden = note == nil
         message.toolTip = note
         settingsPage.updateStatus()
 
-        let key = "\(needsSetup)|\(editing)|\(settingsOpen)|\(editorRows.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)|\(percent.stringValue.count)|\(model.minimumPercent)|\(slider.style.rawValue)|\(settingsPage.layoutKey)"
+        let key = "\(section)|\(setupStage)|\(needsSetup)|\(editing)|\(settingsOpen)|\(editorRows.count)|\(presetButtons.count)|\(message.stringValue)|\(temperature.stringValue)\(unit.stringValue)|\(percent.stringValue.count)|\(model.minimumPercent)|\(slider.style.rawValue)|\(settingsPage.layoutKey)"
         if key != layoutKey { layoutKey = key; needsLayout = true }
         resize?(desiredHeight)
+        if displayedSection != section {
+            displayedSection = section
+            focusControls()
+        }
     }
 
     /// Big number and, only when it needs words, the state. `roll` turns the
@@ -435,6 +506,81 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     /// Cold-air strength: the measured fan speed, absent without a fresh reading.
     private var chillLevel: Double { Airflow.chill(measuredPercent: model.sample == nil || model.stale ? nil : model.actualPercent) }
 
+    // MARK: Introduction and setup
+
+    /// Which lower view shows (none for temperature only), the welcome's
+    /// live glance, and the setup card. While macOS waits for approval and
+    /// the panel is open, the approval is noticed within a sample (instead of
+    /// the model's bounded approval checks), and nothing is sent to the fan.
+    private func updateIntroduction() {
+        if !settingsOpen {
+            fanSection.isHidden = section != .fan
+            welcomeCard.isHidden = section != .welcome
+        }
+        if section == .welcome && !settingsOpen {
+            welcomeCard.glance.show(measuredPercent: model.sample == nil || model.stale ? nil : model.actualPercent, animated: window?.isVisible == true)
+        }
+        let stage = onboarding.state.stage
+        if stage == .approval && !model.busy && !model.helperReady && !model.helperApprovalRequired {
+            onboarding.handle(.setupFailed)
+        }
+        if model.helperReady && (stage == .approval || stage == .preview) { onboarding.handle(.helperConnected) }
+        switch setupStage {
+        case .approval:
+            setupCard.show(.approval(connecting: model.busy))
+        case .connected:
+            setupCard.show(.connected(measuredPercent: model.sample == nil || model.stale ? nil : model.actualPercent))
+        case .none: break
+        }
+        setupCard.isHidden = setupStage == .none
+    }
+    /// "Control the fan": the fan section appears as a preview (nothing is
+    /// set up or sent until the Set Up button).
+    private func chooseControl() {
+        onboarding.handle(.chooseControl)
+        update(); layoutSubtreeIfNeeded()
+        reveal(fanSection)
+        focusControls()
+    }
+    private func chooseTemperatureOnly() {
+        // Monitoring alone means firmware owns the fan. Do not hide the
+        // controls until restoration succeeds, or conceal a failed restore.
+        model.chooseAutomatic { [weak self] in
+            guard let self else { return }
+            if !self.model.ownsControl && !self.model.smartEnabled && !self.model.busy && self.model.requestedPercent == nil && self.model.sample?.automatic == true && !self.model.stale {
+                self.onboarding.handle(.chooseTemperatureOnly)
+            } else {
+                self.onboarding.handle(.fanControls(true))
+                if self.model.error == nil { self.model.error = "Automatic control is not confirmed. Try again after a fresh reading." }
+            }
+            self.settingsPage.sync()
+            self.update(); self.focusControls()
+        }
+    }
+    /// The explicit setup click: approval in Login Items, then connection.
+    private func startSetup() {
+        onboarding.handle(.setupRequested)
+        model.enableControl()
+        update(); focusControls()
+    }
+    private func replayIntroduction() {
+        onboarding.handle(.replay)
+        if settingsOpen { settingsOpen = false; settingsScroll.isHidden = true }
+        update(); layoutSubtreeIfNeeded()
+        welcomeCard.playEntrance()
+        focusControls()
+    }
+    /// A section arriving below the temperature rises a few points as it
+    /// fades up (finite, skipped with Reduce Motion).
+    private func reveal(_ view: NSView) {
+        guard Theme.effects.animates, window?.isVisible == true, let layer = view.layer else { return }
+        let rise = CABasicAnimation(keyPath: "transform")
+        rise.fromValue = NSValue(caTransform3D: CATransform3DMakeTranslation(0, 8, 0)); rise.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        rise.duration = 0.3; rise.timingFunction = Theme.Ease.out
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.22
+        layer.add(rise, forKey: "rise"); layer.add(fade, forKey: "fade")
+    }
+
     // MARK: Presets
 
     private func syncPresets() {
@@ -487,7 +633,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
 
     /// Keeps keys flowing to the panel while the slider is hidden (Settings).
     /// Otherwise the slider keeps focus, even after a click on empty glass.
-    override var acceptsFirstResponder: Bool { settingsOpen }
+    override var acceptsFirstResponder: Bool { true }
     override func keyDown(with event: NSEvent) {
         if editing {
             switch event.keyCode {
@@ -498,8 +644,9 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
             return
         }
         if event.keyCode == 53 { window?.cancelOperation(nil); return }
+        keyHints.show([])
         let flags = event.modifierFlags
-        guard !settingsOpen, !slider.dragging,
+        guard !settingsOpen, !slider.dragging, section == .fan,
               let action = QuickAction.resolve(characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
                                                command: flags.contains(.command), option: flags.contains(.option),
                                                control: flags.contains(.control), presetCount: model.presets.count),
@@ -524,7 +671,24 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
             guard !model.stale else { NSSound.beep(); return }
             request(model.shownPercent, motion: .instant)
         case .settings: toggleSettings()
+        case .smartTarget(let steps):
+            guard model.smartEnabled else { NSSound.beep(); return }
+            chart.stepTarget(by: steps)
         }
+    }
+    /// Holding ⌘ alone shows each control's key on it; letting go, or any
+    /// key, hides them. Nothing in the panel needs words for its shortcuts.
+    override func flagsChanged(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        keyHints.show(flags == .command && section == .fan && !settingsOpen && !editing ? keyHintItems : [])
+        super.flagsChanged(with: event)
+    }
+    private var keyHintItems: [KeyHintsView.Hint] {
+        func rect(_ view: NSView) -> NSRect { convert(view.bounds, from: view) }
+        var hints: [KeyHintsView.Hint] = [(rect(autoButton), "A"), (rect(smartButton), "S"), (rect(manualButton), "M"), (rect(settingsButton), "⌘,")]
+        for (i, button) in presetButtons.enumerated() where !button.isHidden { hints.append((rect(button), "\(i + 1)")) }
+        if model.smartEnabled { hints.append((convert(chart.handleFrame, from: chart), "[ ]")) }
+        return hints
     }
     /// Escape peels one layer: an open preset editor cancels first. Returns
     /// false when there is nothing to peel and the panel should close.
@@ -543,12 +707,12 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     }
     private func focusControls() {
         guard let window, window.isVisible else { return }
-        window.makeFirstResponder(settingsOpen ? self : slider)
+        if !window.makeFirstResponder(preferredFirstResponder) { window.makeFirstResponder(self) }
     }
     private func openEditor() {
         endTextEditing()
         if draft == nil { draft = PresetDraft(model.presets) }
-        if settingsOpen { settingsOpen = false; showSection(fanSection, from: -1) }
+        if settingsOpen { settingsOpen = false; showSection(lowerView, from: -1) }
         rebuildEditor(); update(); layoutSubtreeIfNeeded()
         if let first = editorRows.first { window?.makeFirstResponder(first.name) } else { focusControls() }
     }
@@ -670,13 +834,13 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     private func toggleSettings() {
         if editing { saveEditing(focus: false) }
         endTextEditing()
-        settingsOpen.toggle()
+        settingsOpen.toggle(); keyHints.show([])
         if settingsOpen {
             settingsPage.sync()
             settingsScroll.contentView.scroll(to: .zero); settingsScroll.reflectScrolledClipView(settingsScroll.contentView)
             showSection(settingsScroll, from: 1)
         } else {
-            showSection(fanSection, from: -1)
+            showSection(lowerView, from: -1)
         }
         update()
         focusControls()
@@ -684,9 +848,12 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
     /// Swaps the lower section in place: the incoming one slides a few
     /// points in from the side it lives on and fades up; the outgoing one
     /// leaves at once (exits are faster than entrances).
-    private func showSection(_ incoming: NSView, from direction: CGFloat) {
-        let outgoing: NSView = incoming === settingsScroll ? fanSection : settingsScroll
-        outgoing.isHidden = true; incoming.isHidden = false
+    /// What shows below the temperature when Settings is closed.
+    private var lowerView: NSView? { section == .fan ? fanSection : section == .welcome ? welcomeCard : nil }
+    private func showSection(_ incoming: NSView?, from direction: CGFloat) {
+        for view in [fanSection, welcomeCard, settingsScroll] where view !== incoming { view.isHidden = true }
+        guard let incoming else { return }
+        incoming.isHidden = false
         guard Theme.effects.animates, window?.isVisible == true, let layer = incoming.layer else { incoming.alphaValue = 1; return }
         let slide = CABasicAnimation(keyPath: "transform")
         slide.fromValue = NSValue(caTransform3D: CATransform3DMakeTranslation(12 * direction, 0, 0)); slide.toValue = NSValue(caTransform3D: CATransform3DIdentity)
@@ -809,6 +976,46 @@ final class ChillView: NSView {
     }
 }
 
+/// Key badges over the controls while ⌘ is held: small capsules at each
+/// control's top-right corner. Appear and leave in 120 ms (at once with
+/// Reduce Motion); never intercept the pointer.
+final class KeyHintsView: FlippedView {
+    typealias Hint = (rect: NSRect, key: String)
+    private var badges: [CATextLayer] = []
+    private(set) var shown: [String] = []
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; setAccessibilityElement(false) }
+    required init?(coder: NSCoder) { fatalError() }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func show(_ hints: [Hint]) {
+        let keys = hints.map(\.key)
+        guard keys != shown else { return }
+        shown = keys
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        badges.forEach { $0.removeFromSuperlayer() }; badges.removeAll()
+        guard let layer, !hints.isEmpty else { return }
+        let font = Theme.number(9, .semibold), scale = window?.backingScaleFactor ?? 2
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            for hint in hints where !hint.rect.isEmpty {
+                let badge = CATextLayer()
+                badge.string = hint.key; badge.font = font; badge.fontSize = 9; badge.alignmentMode = .center; badge.contentsScale = scale
+                let width = max(14, ceil((hint.key as NSString).size(withAttributes: [.font: font]).width) + 8)
+                badge.frame = CGRect(x: hint.rect.maxX - width + 3, y: hint.rect.minY - 5, width: width, height: 13)
+                badge.cornerRadius = 4
+                badge.backgroundColor = Theme.ink.withAlphaComponent(0.78).cgColor
+                badge.foregroundColor = (Theme.dark ? NSColor.black : NSColor.white).cgColor
+                layer.addSublayer(badge); self.badges.append(badge)
+                if Theme.effects.animates {
+                    let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.12
+                    fade.timingFunction = Theme.Ease.out
+                    badge.add(fade, forKey: "fade")
+                }
+            }
+        }
+    }
+}
+
 /// Inline settings: short row labels on the left, native controls on the
 /// right. Every change applies and persists immediately.
 final class SettingsView: FlippedView {
@@ -816,6 +1023,11 @@ final class SettingsView: FlippedView {
     var editPresets: (() -> Void)?
     var quit: (() -> Void)?
     var changed: (() -> Void)?
+    /// Whether the fan controls are shown (false: temperature only), and
+    /// the setter; the introduction again.
+    var fanControls: (() -> Bool)?
+    var setFanControls: ((Bool) -> Void)?
+    var replayIntroduction: (() -> Void)?
     private let prefs = PresentationPreferences.shared
     private let sensorValues = ["CPU", "GPU", "Warmer"]
 
@@ -825,7 +1037,7 @@ final class SettingsView: FlippedView {
     private let spacing = NSSegmentedControl(labels: MenuBarSpacing.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
     private let effects = NSSegmentedControl(labels: EffectsLevel.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
     private let sliderStyle = NSSegmentedControl(labels: SliderStyle.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
-    private let heat = NSSwitch(), autoReturn = NSSwitch(), login = NSSwitch(), lowPower = NSSwitch()
+    private let heat = NSSwitch(), autoReturn = NSSwitch(), login = NSSwitch(), lowPower = NSSwitch(), fanControl = NSSwitch()
     /// Smart's target, in whole degrees of the user's unit. Editing it never
     /// turns Smart on; the main selector does that.
     private let smartTarget = NSSlider(value: 80, minValue: 60, maxValue: 95, target: nil, action: nil)
@@ -836,10 +1048,11 @@ final class SettingsView: FlippedView {
     private let returnSlider = NSSlider(value: 30, minValue: 5, maxValue: 120, target: nil, action: nil)
     private let returnValue = label("30 min", size: 11, weight: .medium, color: .secondaryLabelColor)
     private let errorMessage = NSTextField(wrappingLabelWithString: "")
-    private lazy var source = SoftButton("Source code", glyph: .github) { NSWorkspace.shared.open(URL(string: "https://github.com/kirniy/aervane")!) }
+    private lazy var source = SoftButton("", glyph: .github) { NSWorkspace.shared.open(URL(string: "https://github.com/kirniy/aervane")!) }
     private lazy var editButton = SoftButton("Edit Presets") { [weak self] in self?.editPresets?() }
+    private lazy var welcomeButton = SoftButton("Welcome") { [weak self] in self?.replayIntroduction?() }
     private lazy var quitButton = SoftButton("Quit", glyph: .power) { [weak self] in self?.quit?() }
-    var buttons: [SoftButton] { [source, editButton, quitButton] }
+    var buttons: [SoftButton] { [source, editButton, welcomeButton, quitButton] }
     private var rows: [(label: NSTextField, control: NSView)] = []
 
     init(model: AppModel) {
@@ -855,6 +1068,7 @@ final class SettingsView: FlippedView {
             ("Return to Auto", autoReturn, "Hand the fan back to macOS after a set time. Manual speeds only."),
             ("", returnSlider, nil),
             ("Open at login", login, nil), ("Low power", lowPower, "Read sensors less often while the panel is closed. Smart cooling keeps a 2-second pace."),
+            ("Fan control", fanControl, "Show the fan controls, or only the temperature"),
         ]
         for (title, control, tip) in entries {
             let name = label(title, size: 12, color: .labelColor)
@@ -864,7 +1078,7 @@ final class SettingsView: FlippedView {
             rows.append((name, control)); addSubview(name); addSubview(control)
         }
         for control in [sensor, units, menuBar, spacing, effects, sliderStyle] { control.controlSize = .small; control.segmentDistribution = .fillEqually; control.font = Theme.font(11, .medium) }
-        for toggle in [heat, autoReturn, login, lowPower] { toggle.controlSize = .small }
+        for toggle in [heat, autoReturn, login, lowPower, fanControl] { toggle.controlSize = .small }
         smartTarget.controlSize = .small; smartTarget.isContinuous = true
         smartTargetValue.alignment = .right
         addSubview(smartTargetValue)
@@ -879,8 +1093,9 @@ final class SettingsView: FlippedView {
         errorMessage.font = Theme.font(11); errorMessage.textColor = Theme.caution
         errorMessage.maximumNumberOfLines = 2; errorMessage.lineBreakMode = .byTruncatingTail
         addSubview(errorMessage)
-        source.quiet = true; source.setAccessibilityLabel("Source code on GitHub")
-        editButton.quiet = true; quitButton.quiet = true
+        source.quiet = true; source.setAccessibilityLabel("Source code on GitHub"); source.toolTip = "Source code"
+        editButton.quiet = true; quitButton.quiet = true; welcomeButton.quiet = true
+        welcomeButton.setAccessibilityLabel("Show the introduction again")
         buttons.forEach(addSubview)
         sync()
     }
@@ -893,6 +1108,10 @@ final class SettingsView: FlippedView {
     private var note: String? { model.error ?? model.smartNotice }
 
     func updateStatus() {
+        // No fan: read-only, and the tooltip says why.
+        fanControl.isEnabled = model.fanAvailable
+        fanControl.state = model.hasDetectedFan && fanControls?() != false ? .on : .off
+        fanControl.toolTip = model.fanAvailable ? "Show the fan controls, or only the temperature" : (model.fanReadError ?? "No fan on this Mac")
         let text = note ?? ""
         if errorMessage.stringValue != text { errorMessage.stringValue = text; needsLayout = true }
         errorMessage.isHidden = text.isEmpty
@@ -900,7 +1119,8 @@ final class SettingsView: FlippedView {
         if smartExpanded { updateExplainer() }
     }
     /// The target row in the user's unit (a °F step is its own stored value).
-    private func syncTarget() {
+    /// Also called when the target is chosen on the trend.
+    func syncTarget() {
         let range = SmartTarget.displayRange(fahrenheit: model.fahrenheit)
         smartTarget.minValue = Double(range.lowerBound); smartTarget.maxValue = Double(range.upperBound)
         let shown = SmartTarget.display(model.smartTarget, fahrenheit: model.fahrenheit)
@@ -993,8 +1213,9 @@ final class SettingsView: FlippedView {
             errorMessage.frame = NSRect(x: m, y: y, width: w, height: 32)
             y += 40
         }
-        source.frame = NSRect(x: m - 6, y: y, width: 124, height: 28)
-        editButton.frame = NSRect(x: m + 122, y: y, width: 96, height: 28)
+        source.frame = NSRect(x: m - 6, y: y, width: 30, height: 28)
+        editButton.frame = NSRect(x: m + 28, y: y, width: 96, height: 28)
+        welcomeButton.frame = NSRect(x: m + 126, y: y, width: 80, height: 28)
         quitButton.frame = NSRect(x: m + w - 68, y: y, width: 74, height: 28)
     }
 
@@ -1037,6 +1258,8 @@ final class SettingsView: FlippedView {
             model.toggleLogin()
         } else if sender === lowPower {
             model.lowPower = lowPower.state == .on
+        } else if sender === fanControl {
+            setFanControls?(fanControl.state == .on)
         }
         sync()
         changed?()

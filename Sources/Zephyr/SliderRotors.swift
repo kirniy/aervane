@@ -144,18 +144,19 @@ import QuartzCore
 /// is wrapped into one period (its artwork repeats every period), so the
 /// offset never accumulates however often it stops and resumes.
 @MainActor final class LoopSet {
-    private struct Loop { let layer: CALayer; let keyPath: String; let period: CGFloat?; let duration: CFTimeInterval; let make: (Double) -> CAAnimation }
+    private struct Loop { let layer: CALayer; let keyPath: String; let period: CGFloat?; let duration: CFTimeInterval; var direction: CGFloat = -1; let make: (Double) -> CAAnimation }
     private var loops: [Loop] = []
     private var rests: [ObjectIdentifier: CGFloat] = [:]
     private var pace: Double = 1
     private static let key = "loop"
 
-    /// A scrolling loop: moves `layer` by −`period` along x every
-    /// `duration` seconds (scaled by the pace given to `start`).
-    func scroll(_ layer: CALayer, period: CGFloat, duration: CFTimeInterval) {
-        loops.append(Loop(layer: layer, keyPath: "position.x", period: period, duration: duration) { pace in
+    /// A scrolling loop: moves `layer` by one `period` along x every
+    /// `duration` seconds (scaled by the pace given to `start`), toward the
+    /// start of the track by default (`direction` −1) or the handle (+1).
+    func scroll(_ layer: CALayer, period: CGFloat, duration: CFTimeInterval, direction: CGFloat = -1) {
+        loops.append(Loop(layer: layer, keyPath: "position.x", period: period, duration: duration, direction: direction < 0 ? -1 : 1) { pace in
             let move = CABasicAnimation(keyPath: "position.x")
-            move.fromValue = 0; move.toValue = -period; move.isAdditive = true
+            move.fromValue = 0; move.toValue = (direction < 0 ? -1 : 1) * period; move.isAdditive = true
             move.duration = duration * pace; move.repeatCount = .greatestFiniteMagnitude
             return move
         })
@@ -186,11 +187,13 @@ import QuartzCore
     var probes: [Probe] {
         loops.map { loop in
             let shown = (loop.layer.presentation()?.value(forKeyPath: loop.keyPath) as? NSNumber)?.doubleValue
-            let velocity = loop.period.flatMap { period in loop.duration > 0 ? -period / CGFloat(loop.duration * pace) : nil }
+            let velocity = loop.period.flatMap { period in loop.duration > 0 ? loop.direction * period / CGFloat(loop.duration * pace) : nil }
             return Probe(keyPath: loop.keyPath, shown: shown, period: loop.period, velocity: velocity)
         }
     }
     var animationCount: Int { loops.reduce(0) { $0 + ($1.layer.animation(forKey: Self.key) == nil ? 0 : 1) } }
+    /// The pace the loops run at (or last ran at).
+    var currentPace: Double { pace }
 
     /// Starts every loop (idempotent). `pace` scales every duration; a new
     /// pace (Expressive ↔ Subtle) re-times the loops from where they are.
