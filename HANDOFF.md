@@ -4,11 +4,11 @@ Updated 2026-10-23. Public repository: https://github.com/kirniy/aervane. Native
 
 ## Current work
 
-Version 0.3.0 remains the public GitHub/Homebrew release. Version 0.4.0 is implemented and installed locally; publication is being prepared with refreshed actual-app media.
+Version 0.4.0 is published on GitHub and Homebrew. The public cask upgrade from 0.3.0 passed, and the installed signature and stapled ticket validate. Final hardware readback: Manual 76%, target 3724 RPM, actual 3725 RPM. Smart and Return to Auto are off; saved target is 70°C.
 
 Actual Claude implemented the all-speed Dot Grid wave, editable Smart target on the graph, inline first-run flow, and discoverable keyboard hints. Parent integration added independent fan/temperature reads, approval retry recovery, verified Auto before hiding fan controls, stable layouts through transient fan failures, and paused hidden onboarding motion. No new runtime dependencies or per-frame application loops.
 
-The latest Mac suite passed **300 tests** on Xcode 27.1, including compositor motion and Smart-target drag/keyboard/Accessibility tests. The signed 0.4.0 bundle was installed after normal quit and an independent Auto readback. Live graph dragging, bracket keys, Accessibility target updates, onboarding replay and Temperature-only restoration have passed on the installed app. Auto was independently read back. Actual panel/onboarding/settings captures and a 30-frame motion clip replace prior media.
+The latest Mac suite passed **300 tests** on Xcode 27.1, including compositor motion and Smart-target drag/keyboard/Accessibility tests. The signed 0.4.0 bundle was installed through the public cask after normal quit and an independent Auto readback. Live graph dragging, bracket keys, Accessibility target updates, onboarding replay and Temperature-only restoration have passed on the installed app. Auto was independently read back. Actual panel/onboarding/settings captures and a 30-frame motion clip replace prior media.
 
 A reported menu-bar/panel mismatch was caused by different sources: selected CPU average in the menu bar versus Smart's CPU peak in the panel. Both now use the same TemperatureReadout, including units, freshness and accessible source description. Auto/Manual still honor the saved sensor preference. The installed Smart panel correctly shows CPU PEAK; menu-bar formatting now has a regression test against the identical model readout, including a 68°C average / 74°C peak fixture. The app-window UI capture does not include the desktop menu-bar item.
 

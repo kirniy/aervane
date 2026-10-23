@@ -57,3 +57,15 @@ Apple accepted submission `b67b970a-0834-4a43-b410-4c87cb41320f`. The final temp
 The development Mac has a pre-existing global Gatekeeper override; assessment on this machine is not clean-machine Gatekeeper validation. Cryptographic signatures and the stapled Apple ticket were checked separately.
 
 The public Homebrew upgrade from 0.2.0 to 0.3.0 succeeded on the development Mac. The downloaded installation passed strict signature verification, matching Developer ID team verification and stapled-ticket validation. The helper reconnected and independently measured 3724 RPM at manual 76%. The tap's online audit and style CI passed: https://github.com/kirniy/homebrew-tap/actions/runs/39946315049.
+
+
+## 0.4.0 public release
+
+- Source: `38b53efdb5e384608e01f48040ebf58f4708d78a`.
+- Release: https://github.com/kirniy/aervane/releases/tag/v0.4.0
+- Notarization accepted: `9ff9edb3-b1aa-4ef9-b445-9fe328764991`.
+- Archive SHA-256: `8489498d6c7f8f666718d09f663244296b769413d2cad2de7c38dd52c8f2af36`.
+- Tap commit: `7050c85`; tap CI `39959109179` passed.
+- Public Homebrew upgrade 0.3.0 → 0.4.0 succeeded. Installed Developer ID signature and stapled-ticket validation passed.
+- Source CI runs `39959072564` and `39959083715` were still running at this record; local Mac suite passed 300 tests, followed by focused checks of the final chart Accessibility and temperature-sync changes.
+- Final independent fan readback: manual, target 3724 RPM, actual 3725 RPM (76%).

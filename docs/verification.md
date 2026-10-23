@@ -76,3 +76,5 @@ No flawless or universal-hardware-support claim is made.
 - Independent temperature/fan failures and fanless monitoring paths use simulated fixtures; physical hardware coverage remains the M4 Mac mini.
 - Menu-bar/panel use the same TemperatureReadout in all modes; regression uses CPU average 68°C versus Smart peak 74°C, Fahrenheit and stale telemetry. App-window captures do not include the desktop menu-bar item.
 - Full VoiceOver navigation, multi-display, fanless hardware and fresh-account OS authorization prompts remain unverified.
+
+Public Homebrew 0.4.0 installation was then verified. The final chart target is correctly exposed as an enabled Accessibility slider. Existing helper approval was reused. Final readback: `F0Md=1`, `F0Tg=3724`, `F0Ac=3725` (76% manual); Smart off, Return to Auto off, target preference 70°C.
