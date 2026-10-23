@@ -1,5 +1,9 @@
 # Resource measurements
 
+## 0.3.0 slider checkpoint
+
+After exercising the living-frost slider, a 30-second closed-panel sample on the same M4 Mac mini measured **0.33% of one CPU core**, **45.0 MiB physical footprint** and **61.0 MiB RSS** for the app. Helper CPU rounded to 0.00% at this resolution; its RSS was 9.2 MiB. This is one short development sample, before the final temperature-transition refinement, not a benchmark for other Macs. System Reduce Motion was disabled. Other desktop work was running; WindowServer cost cannot be attributed to Aervane from a system-wide sample.
+
 ## Version 0.2.0
 
 The signed release with both slider styles was exercised on the M4 Mac mini (32 GB), macOS 27.0, with Expressive effects. A subsequent 30-second sample with the panel closed, normal three-second polling and manual 76% control measured **0.40% of one CPU core** and a **34.1 MiB physical footprint** for the app. RSS was 78.2 MiB; lifetime peak footprint after startup and interface exercise was 91.7 MiB. Memory is a single sample, not an average. The helper was running; it is not included in these app-only figures.
@@ -23,6 +27,6 @@ The signed bundle contains **2.87 MiB** of file data (about 2.89 MiB allocated o
 
 Identify the app and helper from `ps -axo pid=,comm=`. Use `ps -p <pid> -o time=,rss=` for each twice, 30 seconds apart, and `footprint -p <pid> --noCategories -f bytes`. Close the panel without reopening it during the closed interval. The normal closed interval is three seconds; optional low-power polling uses eight seconds. A visible panel polls every second. The open sample had Settings visible, manual control active and the optional timer running; the closed sample had manual control active and the timer disabled.
 
-The app has no web runtime, telemetry, background network requests, display link, or looping idle animation. Temperature history is capped at 60 samples. Slider dot/frost images are rebuilt only when geometry, appearance or the hardware floor changes; pointer motion updates small Core Animation layers. Temporary animations are removed when the panel closes.
+The app has no web runtime, telemetry, background network requests, display link, or per-frame Swift animation loop. Visible slider effects use a bounded set of repeating Core Animation layers; those loops stop when the panel is hidden, settings replace the slider, or motion is disabled. Temperature history is capped at 60 samples. Slider dot/frost images are rebuilt only when geometry, appearance or the hardware floor changes; pointer motion updates small Core Animation layers. Temporary animations are removed when the panel closes.
 
 Before a production release, repeat longer idle and interaction runs on supported Macs, measure the helper's physical footprint with suitable access, profile allocations and wakeups, and verify sleep/wake behavior.

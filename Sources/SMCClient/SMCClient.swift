@@ -127,6 +127,14 @@ public final class SMCReader: @unchecked Sendable {
         let values = try readCPUSamples()
         return values.reduce(0, +) / Double(values.count)
     }
+    /// Mean and hottest CPU core from one read of the discovered key set,
+    /// so the displayed average and Smart cooling's hottest core describe
+    /// the same instant without reading the sensors twice.
+    public func readCPUTemperatures() throws -> (average: Double, hottest: Double) {
+        let values = try readCPUSamples()
+        guard let hottest = values.max() else { throw SMCError.readFailed("CPU temperature", -4) }
+        return (values.reduce(0, +) / Double(values.count), hottest)
+    }
     public func readCPUHottestTemperature() throws -> Double {
         guard let value = try readCPUSamples().max() else {
             throw SMCError.readFailed("CPU temperature", -4)

@@ -8,7 +8,7 @@ import ZephyrCore
 /// Plain-key shortcuts while the fan controls are showing. Text fields never
 /// see these: a field editor consumes its own keys before the panel does.
 enum QuickAction: Equatable {
-    case preset(Int), automatic, manual, settings
+    case preset(Int), automatic, smart, manual, settings
 
     /// Physical top-row and keypad keys 1–6, so layouts that need Shift for
     /// digits (AZERTY) still reach presets by position.
@@ -25,6 +25,7 @@ enum QuickAction: Equatable {
         if let index = digitKeyCodes[keyCode] { return index < presetCount ? .preset(index) : nil }
         switch key {
         case "a": return .automatic
+        case "s": return .smart
         case "m": return .manual
         default: return nil
         }
@@ -138,5 +139,109 @@ enum TrendInspection {
         guard let low = values.min(), let high = values.max(), let now = values.last else { return nil }
         let unit = fahrenheit ? "°F" : "°C"
         return "\(Int(low.rounded())) to \(Int(high.rounded())) \(unit), now \(Int(now.rounded()))"
+    }
+}
+
+/// What Smart measured in one evaluated sample, and when (for freshness).
+struct SmartSample: Equatable {
+    let celsius: Double?
+    let source: SmartTemperatureSource?
+    let at: Date
+}
+
+/// The panel's big temperature: its value, compact tag, spoken detail and
+/// the history that belongs with it. While Smart runs, the panel shows the
+/// very measurement Smart regulates (its source and any held GPU value), so
+/// the figure, the heat colour, the chart and Smart's status agree. In Auto
+/// and Manual it shows the user's selected sensor. The menu bar always keeps
+/// the selected sensor. Missing or stale Smart data is shown as unavailable,
+/// never replaced by an average.
+struct TemperatureReadout: Equatable {
+    enum Series: Equatable { case selected, smart }
+    let celsius: Double?
+    let tag: String
+    let detail: String
+    let series: Series
+
+    /// A Smart sample older than this is not shown (matches the model's
+    /// staleness limit for fan and sensor samples).
+    static let smartFreshness: TimeInterval = 12
+
+    static func panel(smartEnabled: Bool, smart: SmartSample?, selectedSensor: String, selectedCelsius: Double?, stale: Bool, now: Date) -> TemperatureReadout {
+        if smartEnabled {
+            let fresh = smart.flatMap { sample -> Double? in
+                guard !stale, let celsius = sample.celsius, celsius.isFinite,
+                      (-1...smartFreshness).contains(now.timeIntervalSince(sample.at)) else { return nil }
+                return celsius
+            }
+            let source = fresh == nil ? nil : smart?.source
+            return TemperatureReadout(celsius: fresh, tag: (source ?? .cpuPeak).tag,
+                                      detail: source?.detail ?? "Smart's temperature is unavailable", series: .smart)
+        }
+        let (tag, detail): (String, String)
+        switch selectedSensor {
+        case "GPU": (tag, detail) = ("GPU AVG", "GPU average")
+        case "Warmer": (tag, detail) = ("WARMER", "Warmer of the CPU and GPU averages")
+        default: (tag, detail) = ("CPU AVG", "CPU average")
+        }
+        return TemperatureReadout(celsius: stale ? nil : selectedCelsius, tag: tag, detail: detail, series: .selected)
+    }
+
+    /// The figure as shown: whole degrees in the user's unit, or "—".
+    func text(fahrenheit: Bool) -> String {
+        guard let celsius, celsius.isFinite else { return "—" }
+        return String(SmartStatusText.displayed(celsius, fahrenheit: fahrenheit))
+    }
+}
+
+/// How the panel's large temperature figure changes to a new reading.
+///
+/// Calm and honest: a reading replaces the previous one at once (no
+/// interpolation through temperatures that were never measured); when both
+/// are real readings of the same source in the same unit and the panel is on
+/// screen with motion allowed, the figure crossfades briefly. Anything else
+/// (first reading, stale ↔ valid, a different source or unit, hidden, Effects
+/// Off, Reduce Motion) changes without motion, so nothing implies a change
+/// that did not happen.
+enum TemperatureMotion: Equatable {
+    case none, fade
+    /// Short enough to finish well before the next 1 s sample.
+    static let duration = 0.2
+
+    static func between(_ old: String, _ new: String, sameSeries: Bool, sameUnit: Bool, visible: Bool, allowed: Bool) -> TemperatureMotion {
+        guard old != new, allowed, visible, sameSeries, sameUnit, Int(old) != nil, Int(new) != nil else { return .none }
+        return .fade
+    }
+}
+
+/// Smart's status words, consistent with the figure the panel shows.
+enum SmartStatusText {
+    /// Whole degrees as displayed in the user's unit.
+    static func displayed(_ celsius: Double, fahrenheit: Bool) -> Int {
+        Int((fahrenheit ? celsius * 1.8 + 32 : celsius).rounded())
+    }
+    /// "Above 73° · max cooling", only when Smart's full speed is confirmed
+    /// (`atMaximum`, gated on the applied target) *and* the shown temperature
+    /// is visibly above the shown target: 73° beside a 73° target never says
+    /// "Above".
+    static func chip(atMaximum: Bool, celsius: Double?, target: Double, fahrenheit: Bool) -> String? {
+        guard atMaximum, let celsius, celsius.isFinite else { return nil }
+        let shownTarget = SmartTarget.display(target, fahrenheit: fahrenheit)
+        guard displayed(celsius, fahrenheit: fahrenheit) > shownTarget else { return nil }
+        return "Above \(shownTarget)° · max cooling"
+    }
+    /// The Smart button's tooltip: key, target, what it measures and asks
+    /// for, and why when it asks for full speed below the target.
+    static func summary(enabled: Bool, celsius: Double?, source: SmartTemperatureSource?, request: Double?, target: Double, fahrenheit: Bool) -> String {
+        let unit = fahrenheit ? "°F" : "°C"
+        let goal = "\(SmartTarget.display(target, fahrenheit: fahrenheit))\(unit)"
+        guard enabled else { return "Smart (S): regulates around \(goal)" }
+        guard let celsius, celsius.isFinite, let request else { return "Smart (S), target \(goal): waiting for a reading" }
+        let now = "\(displayed(celsius, fahrenheit: fahrenheit))\(unit) \((source ?? .cpuPeak).tag.lowercased())"
+        var text = "Smart (S), target \(goal): \(now), requesting \(Int(request.rounded()))%"
+        if request >= 100, displayed(celsius, fahrenheit: fahrenheit) <= SmartTarget.display(target, fahrenheit: fahrenheit) {
+            text += " in response to recent heat"
+        }
+        return text
     }
 }

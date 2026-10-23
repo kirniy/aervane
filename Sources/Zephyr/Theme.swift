@@ -304,28 +304,46 @@ final class SoftButton: NSButton {
     }
 }
 
-/// Auto / Manual as one control: a pill slides to the active mode with a
-/// spring and changes material with the state (neutral for Auto, accent
-/// for applied Manual, caution for a preview that is not applied). The two
-/// buttons keep their own accessibility labels for VoiceOver and agents.
+/// Auto · Smart · Manual as one control. A pill springs to the active mode
+/// and changes material with it: neutral glass for Auto, a cool ice gradient
+/// for Smart (sand when Smart is saturated: full speed and still over its
+/// target), mint for applied Manual and sand for a Manual preview that is
+/// not applied. Choosing Smart plays one finite flourish — a light sweep
+/// across the pill and a brief cold bloom — when effects allow; nothing
+/// animates at rest. Each button keeps its own accessibility label and is a
+/// radio button for VoiceOver.
 final class ModeSwitch: FlippedView {
-    enum Mode: Equatable { case automatic, manual, none }
+    enum Mode: Equatable, CaseIterable { case automatic, smart, manual, none }
     let autoButton: SoftButton
+    let smartButton: SoftButton
     let manualButton: SoftButton
     private let track = FlippedView()
+    private let bloom = CAGradientLayer()
     private let pill = CALayer()
+    private let ice = CAGradientLayer()
+    private let sheen = CAGradientLayer()
 
-    var mode: Mode = .none { didSet { if mode != oldValue { refresh(animated: true) } } }
+    var mode: Mode = .none { didSet { if mode != oldValue { refresh(animated: true, entering: mode == .smart) } } }
     /// Manual is shown but nothing is applied yet.
     var pending = false { didSet { if pending != oldValue { refresh(animated: true) } } }
+    /// Smart is requesting full speed and the temperature is still over its
+    /// target: the Smart pill takes the attention tone.
+    var saturated = false { didSet { if saturated != oldValue { refresh(animated: true) } } }
 
-    init(auto: SoftButton, manual: SoftButton) {
-        autoButton = auto; manualButton = manual
+    init(auto: SoftButton, smart: SoftButton, manual: SoftButton) {
+        autoButton = auto; smartButton = smart; manualButton = manual
         super.init(frame: .zero)
         wantsLayer = true; track.wantsLayer = true
-        track.layer?.addSublayer(pill)
+        bloom.type = .radial; bloom.startPoint = CGPoint(x: 0.5, y: 0.5); bloom.endPoint = CGPoint(x: 1, y: 1); bloom.opacity = 0
+        pill.masksToBounds = true
+        ice.startPoint = CGPoint(x: 0, y: 0.5); ice.endPoint = CGPoint(x: 1, y: 0.5); ice.opacity = 0
+        sheen.startPoint = CGPoint(x: 0, y: 0.5); sheen.endPoint = CGPoint(x: 1, y: 0.5)
+        sheen.colors = [NSColor.white.withAlphaComponent(0).cgColor, NSColor.white.withAlphaComponent(0.55).cgColor, NSColor.white.withAlphaComponent(0).cgColor]
+        sheen.opacity = 0
+        pill.addSublayer(ice); pill.addSublayer(sheen)
+        track.layer?.addSublayer(bloom); track.layer?.addSublayer(pill)
         addSubview(track)
-        for button in [auto, manual] {
+        for button in [auto, smart, manual] {
             button.chromeless = true
             button.setAccessibilityRole(.radioButton)
             addSubview(button)
@@ -334,40 +352,62 @@ final class ModeSwitch: FlippedView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    private var buttons: [SoftButton] { [autoButton, smartButton, manualButton] }
     override func layout() {
         super.layout()
         track.frame = bounds
-        let half = (bounds.width / 2).rounded()
-        autoButton.frame = NSRect(x: 0, y: 0, width: half, height: bounds.height)
-        manualButton.frame = NSRect(x: half, y: 0, width: bounds.width - half, height: bounds.height)
+        for (i, button) in buttons.enumerated() { button.frame = segment(i) }
         refresh(animated: false)
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh(animated: false) }
 
+    /// Equal thirds, on whole points.
+    private func segment(_ index: Int) -> NSRect {
+        let a = (bounds.width * CGFloat(index) / 3).rounded(), b = (bounds.width * CGFloat(index + 1) / 3).rounded()
+        return NSRect(x: a, y: 0, width: b - a, height: bounds.height)
+    }
+    private var index: Int? {
+        switch mode { case .automatic: return 0; case .smart: return 1; case .manual: return 2; case .none: return nil }
+    }
     private var pillColor: NSColor {
         switch mode {
         case .automatic: return Theme.ink.withAlphaComponent(0.13)
+        case .smart: return (saturated ? Theme.caution : Theme.iceMid).withAlphaComponent(0.1)
         case .manual: return (pending ? Theme.caution : Theme.accent).withAlphaComponent(0.22)
         case .none: return .clear
         }
     }
-    private func refresh(animated: Bool) {
+    private func refresh(animated: Bool, entering: Bool = false) {
         guard let trackLayer = track.layer else { return }
         let appearance = effectiveAppearance
         trackLayer.backgroundColor = Theme.cg(Theme.ink.withAlphaComponent(0.055), appearance)
         trackLayer.cornerRadius = bounds.height / 2
-        let inset: CGFloat = 2, half = bounds.width / 2
-        let x = mode == .manual ? half : 0
-        let frame = NSRect(x: x + inset, y: inset, width: max(0, half - 2 * inset), height: max(0, bounds.height - 2 * inset))
+        let inset: CGFloat = 2
+        let frame = segment(index ?? 0).insetBy(dx: inset, dy: inset)
         let color = Theme.cg(pillColor, appearance)
         let from = (pill.presentation() ?? pill)
         let fromPosition = from.position, fromColor = from.backgroundColor, fromOpacity = from.opacity
+        let fromIce = (ice.presentation() ?? ice).opacity
+        let smart = mode == .smart
+        let effects = Theme.effects, live = animated && window != nil && effects.animates && bounds.width > 0
         CATransaction.begin(); CATransaction.setDisableActions(true)
         pill.bounds = CGRect(origin: .zero, size: frame.size)
         pill.cornerRadius = frame.height / 2
         if mode != .none { pill.position = CGPoint(x: frame.midX, y: frame.midY); pill.backgroundColor = color }
         pill.opacity = mode == .none ? 0 : 1
-        if animated, window != nil, Theme.effects.animates, bounds.width > 0 {
+        pill.borderWidth = smart ? 0.5 : 0
+        pill.borderColor = Theme.cg((saturated ? Theme.caution : Theme.iceMid).withAlphaComponent(0.5), appearance)
+        // Smart's material: a cool gradient through the pill (sand when the
+        // fan cannot do more).
+        ice.frame = pill.bounds
+        let a = saturated ? Theme.caution : Theme.iceLow, b = saturated ? Theme.caution : Theme.iceMid
+        ice.colors = [Theme.cg(a.withAlphaComponent(0.26), appearance), Theme.cg(b.withAlphaComponent(0.34), appearance)]
+        ice.opacity = smart ? 1 : 0
+        sheen.bounds = CGRect(x: 0, y: 0, width: 26, height: frame.height); sheen.position = CGPoint(x: -13, y: frame.height / 2)
+        bloom.bounds = CGRect(origin: .zero, size: CGSize(width: frame.width + 24, height: frame.height + 18))
+        bloom.position = pill.position
+        bloom.colors = [Theme.cg(Theme.iceMid.withAlphaComponent(0.45), appearance), Theme.cg(Theme.iceMid.withAlphaComponent(0), appearance)]
+        if live {
             let slide = CASpringAnimation(keyPath: "position")
             slide.mass = 1; slide.stiffness = 300; slide.damping = 24
             slide.fromValue = NSValue(point: fromPosition); slide.toValue = NSValue(point: pill.position)
@@ -377,9 +417,28 @@ final class ModeSwitch: FlippedView {
             let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = fromOpacity; fade.toValue = pill.opacity
             fade.duration = 0.16
             pill.add(slide, forKey: "slide"); pill.add(tone, forKey: "tone"); pill.add(fade, forKey: "fade")
+            let iceFade = CABasicAnimation(keyPath: "opacity"); iceFade.fromValue = fromIce; iceFade.toValue = ice.opacity
+            iceFade.duration = 0.3; iceFade.timingFunction = Theme.Ease.out
+            ice.add(iceFade, forKey: "fade")
+            bloom.add(slide, forKey: "slide")
+            if entering, effects.bloom {
+                // One flourish: light runs across the pill as it lands, and a
+                // cold bloom breathes once behind it.
+                let sweep = CABasicAnimation(keyPath: "position.x"); sweep.fromValue = -13; sweep.toValue = frame.width + 13
+                sweep.duration = 0.7; sweep.timingFunction = Theme.Ease.inOut; sweep.beginTime = CACurrentMediaTime() + 0.12; sweep.fillMode = .backwards
+                let shine = CAKeyframeAnimation(keyPath: "opacity"); shine.values = [0, 1, 0]; shine.keyTimes = [0, 0.4, 1]
+                shine.duration = 0.7; shine.beginTime = sweep.beginTime; shine.fillMode = .backwards
+                sheen.add(sweep, forKey: "sweep"); sheen.add(shine, forKey: "shine")
+                let breathe = CAKeyframeAnimation(keyPath: "opacity"); breathe.values = [0, 0.9 * effects.glow, 0]; breathe.keyTimes = [0, 0.35, 1]
+                breathe.duration = 0.9; breathe.timingFunction = Theme.Ease.out
+                bloom.add(breathe, forKey: "breathe")
+            }
         }
         CATransaction.commit()
         autoButton.selectedTint = Theme.ink; autoButton.selected = mode == .automatic
+        smartButton.selectedTint = saturated ? Theme.caution : Theme.iceMid; smartButton.selected = smart
         manualButton.selectedTint = pending ? Theme.caution : Theme.accent; manualButton.selected = mode == .manual
     }
+    /// Ends any flourish or slide at once (panel hiding).
+    func settle() { for layer in [pill, ice, sheen, bloom] { layer.removeAllAnimations() } }
 }

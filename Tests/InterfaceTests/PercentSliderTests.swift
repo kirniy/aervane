@@ -16,10 +16,10 @@ import XCTest
         host.layoutSubtreeIfNeeded()
         control.displayIfNeeded()
         // The channel first, thumb always topmost.
-        XCTAssertEqual(control.layer?.sublayers?.count, 12)
+        XCTAssertEqual(control.layer?.sublayers?.count, 15)
         XCTAssertNotNil(control.layer?.sublayers?.first?.contents)
         XCTAssertEqual(control.layer?.sublayers?.last?.bounds.size, PercentSlider.thumbSize)
-        XCTAssertEqual(PercentSlider.thumbSize, NSSize(width: 12, height: 24))
+        XCTAssertEqual(PercentSlider.thumbSize, NSSize(width: 20, height: 38))
     }
 
     func testPointerTrackingPreviewsContinuouslyAndCommitsOnceOnRelease() {
@@ -68,6 +68,8 @@ import XCTest
         window.contentView!.addSubview(control)
         control.effects = EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: false)
         control.minimumPercent = 21
+        // Hidden test windows do not schedule AppKit display; create cached artwork explicitly.
+        control.updateLayer()
         control.displayIfNeeded()
         return (window, control)
     }
@@ -112,14 +114,31 @@ import XCTest
         XCTAssertEqual(control.transientAnimationCount, 0)
     }
 
-    func testModelRefreshShowsIceWithoutFormationAnimation() {
-        let (window, control) = hostedSlider(); _ = window
-        control.prepareForHiding()
-        control.setPercent(100, animated: true, celebrate: false)
-        XCTAssertTrue(control.isIceFormed)
-        control.prepareForHiding()
-        XCTAssertTrue(control.isIceFormed, "Formed ice is static state and survives hiding")
-        XCTAssertEqual(control.transientAnimationCount, 0)
+    /// The formation plays for any crossing the person can watch, including
+    /// Smart gliding to 100% while the panel is open. Hidden or startup
+    /// refreshes (unanimated), keys and unchanged 100% polling never play it.
+    func testOnlyVisibleCrossingsPlayTheFormation() {
+        for style in SliderStyle.allCases {
+            let (window, control) = hostedSlider(); _ = window
+            control.style = style
+            control.prepareForHiding() // Exclude the style-switch thumb reaction from the initial baseline.
+            func forming() -> Bool { control.layer?.sublayers?.contains { $0.mask?.animation(forKey: "form") != nil } == true }
+            control.setPercent(100, animated: false)
+            XCTAssertTrue(control.isIceFormed); XCTAssertFalse(forming(), "\(style): a hidden refresh shows the ice at once")
+            XCTAssertEqual(control.transientAnimationCount, 0)
+            control.setPercent(100, animated: true, glide: PercentSlider.externalGlide)
+            XCTAssertFalse(forming(), "\(style): polling at an unchanged 100% never replays it")
+            control.setPercent(80, animated: false); control.prepareForHiding()
+            control.setPercent(100, animated: true, glide: PercentSlider.externalGlide)
+            XCTAssertTrue(forming(), "\(style): Smart reaching 100% in view forms the ice")
+            control.prepareForHiding()
+            XCTAssertTrue(control.isIceFormed, "Formed ice is static state and survives hiding")
+            XCTAssertEqual(control.transientAnimationCount, 0)
+            control.setPercent(95, animated: false); control.prepareForHiding()
+            XCTAssertTrue(control.accessibilityPerformIncrement())
+            XCTAssertTrue(control.isIceFormed); XCTAssertFalse(forming(), "\(style): keys stay instant")
+            XCTAssertEqual(control.transientAnimationCount, 0)
+        }
     }
 
     func testEffectsOffOrReducedMotionGovernIce() {
@@ -224,18 +243,18 @@ import XCTest
 
     // MARK: Slider styles
 
-    /// Dot Grid restores the original layer stack: lattice first, the slim
-    /// 6×20 white handle on top.
-    func testDotGridRestoresTheOriginalLattice() {
+    /// The Dot Grid's layer stack: the tray first, the 9×38 glass handle on
+    /// top, a fixed number of root layers.
+    func testDotGridIsTallWithItsHandleOnTop() {
         let (window, control) = hostedSlider(); _ = window
         control.style = .dotGrid
-        XCTAssertEqual(control.layer?.sublayers?.count, 10)
+        XCTAssertEqual(control.layer?.sublayers?.count, 11)
         XCTAssertNotNil(control.layer?.sublayers?.first?.contents)
-        XCTAssertEqual(control.layer?.sublayers?.last?.bounds.size, NSSize(width: 6, height: 20))
+        XCTAssertEqual(control.layer?.sublayers?.last?.bounds.size, NSSize(width: 9, height: 38))
         XCTAssertEqual(control.currentThumbSize, DotGridGeometry.thumb)
-        XCTAssertEqual(control.layer?.sublayers?.last?.position.x, PercentSlider.trackX(percent: control.percent, width: control.bounds.width, style: .dotGrid))
+        XCTAssertEqual(control.layer!.sublayers!.last!.position.x, PercentSlider.trackX(percent: control.percent, width: control.bounds.width, style: .dotGrid), accuracy: 0.5 / window.backingScaleFactor, "Placement snaps to the physical pixel grid")
         control.style = .channel
-        XCTAssertEqual(control.layer?.sublayers?.count, 12)
+        XCTAssertEqual(control.layer?.sublayers?.count, 15)
         XCTAssertEqual(control.layer?.sublayers?.last?.bounds.size, PercentSlider.thumbSize)
     }
 
@@ -298,6 +317,69 @@ import XCTest
         XCTAssertEqual(control.transientAnimationCount, 0, "Keys stay instant in every style")
     }
 
+    // MARK: Smart moving the slider
+
+    /// A value set from outside (Smart) glides visibly in every style, eased,
+    /// and each newer value retargets the same animations instead of piling
+    /// up. Hiding settles them.
+    func testExternalValuesGlideVisiblyAndRetarget() {
+        for style in SliderStyle.allCases {
+            let (window, control) = hostedSlider(); _ = window
+            control.style = style
+            control.setPercent(40, animated: false); control.prepareForHiding()
+            control.setPercent(70, animated: true, glide: PercentSlider.externalGlide)
+            let thumb = control.layer?.sublayers?.last
+            let first = thumb?.animation(forKey: "position")
+            XCTAssertNotNil(first, "\(style)")
+            XCTAssertEqual(first?.duration ?? 0, PercentSlider.externalGlide, accuracy: 0.001, "Long enough to see")
+            let count = control.transientAnimationCount
+            for value in [74.0, 79, 83, 88] { control.setPercent(value, animated: true, glide: PercentSlider.externalGlide) }
+            XCTAssertLessThanOrEqual(control.transientAnimationCount, count + 2, "Rapid updates do not accumulate")
+            XCTAssertEqual(control.percent, 88, "The latest value is the final position")
+            XCTAssertEqual((thumb?.animation(forKey: "position") as? CABasicAnimation)?.toValue as? NSValue,
+                           NSValue(point: thumb!.position), "Animates toward the newest value")
+            // A user's own change is the short glide again.
+            control.setPercent(50, animated: true)
+            XCTAssertEqual(thumb?.animation(forKey: "position")?.duration ?? 0, SliderSkin.glide, accuracy: 0.001)
+            control.prepareForHiding()
+            XCTAssertEqual(control.transientAnimationCount, 0)
+        }
+    }
+
+    /// Reduce Motion: external values jump, with nothing animating.
+    func testExternalValuesJumpWithReduceMotion() {
+        let (window, control) = hostedSlider(); _ = window
+        control.effects = EffectsProfile(level: .expressive, reduceMotion: true, reduceTransparency: false)
+        control.prepareForHiding()
+        control.setPercent(90, animated: true, glide: PercentSlider.externalGlide)
+        XCTAssertEqual(control.percent, 90)
+        XCTAssertEqual(control.transientAnimationCount, 0)
+    }
+
+    /// Taking hold of the slider reports it at once (the owner selects
+    /// Manual), and a drag is never lengthened by an external glide.
+    func testGrabReportsBeganAndDragStaysImmediate() {
+        let (window, control) = hostedSlider()
+        var began = 0
+        control.began = { began += 1 }
+        control.setPercent(60, animated: false)
+        func event(_ type: NSEvent.EventType, _ percent: Double) -> NSEvent {
+            let x = PercentSlider.trackX(percent: percent, width: control.bounds.width)
+            return NSEvent.mouseEvent(with: type, location: control.convert(NSPoint(x: x, y: 17), to: nil), modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        control.mouseDown(with: event(.leftMouseDown, 60))
+        XCTAssertEqual(began, 1)
+        control.setPercent(90, animated: true, glide: PercentSlider.externalGlide)   // a stale external update mid-drag
+        control.mouseDragged(with: event(.leftMouseDragged, 70))
+        XCTAssertEqual(control.percent, 70)
+        XCTAssertNil(control.layer?.sublayers?.last?.animation(forKey: "position"), "The thumb follows the hand directly")
+        control.mouseUp(with: event(.leftMouseUp, 70))
+        XCTAssertTrue(control.accessibilityPerformIncrement())
+        XCTAssertEqual(began, 2, "The first key of a burst counts as taking hold")
+        XCTAssertTrue(control.accessibilityPerformIncrement())
+        XCTAssertEqual(began, 2)
+    }
+
     func testMeasuredSpeedIsSpokenWhenItDiffersFromTheRequest() {
         let (window, control) = hostedSlider(); _ = window
         control.setPercent(60, animated: false)
@@ -307,27 +389,208 @@ import XCTest
         control.measuredPercent = 61
         XCTAssertNil(control.toolTip)
     }
+    // MARK: Miniature rotors
+
+    /// The Channel's rotors turn in proportion to the fan's actual RPM only
+    /// while the slider is shown: they retime phase-continuously without
+    /// stacking animations, ignore the requested value, and stand still for
+    /// a stopped fan, stale telemetry, Effects Off, Reduce Motion, a disabled
+    /// control, hiding and detaching.
+    func testChannelRotorsFollowActualRPMOnlyWhileShown() {
+        let (window, control) = hostedSlider(); _ = window
+        let expressive = control.effects
+        control.measuredRPM = 1200
+        XCTAssertFalse(control.isRotorSpinning, "A hidden panel costs nothing")
+        XCTAssertEqual(control.rotorAnimationCount, 0)
+        control.ambientActive = true
+        XCTAssertTrue(control.isRotorSpinning)
+        let count = control.rotorAnimationCount
+        XCTAssertEqual(control.rotorRate, 0.6, accuracy: 1e-9, "1200 RPM → 0.6 rev/s")
+        XCTAssertGreaterThan(count, 0); XCTAssertLessThanOrEqual(count, 14, "One repeating rotation per rotor, bounded")
+        // The request never drives the rotors: only the hardware does.
+        control.setPercent(100, animated: false); control.setPercent(40, animated: false)
+        XCTAssertEqual(control.rotorRate, 0.6, accuracy: 1e-9, "The slider value never changes rotor speed")
+        control.measuredRPM = 4800
+        XCTAssertEqual(control.rotorRate, 2.4, accuracy: 1e-9, "Spin-up follows the hardware")
+        XCTAssertEqual(control.rotorAnimationCount, count, "Retiming never stacks or restarts animations")
+        control.measuredRPM = 4800
+        XCTAssertEqual(control.rotorAnimationCount, count, "An unchanged sample changes nothing")
+        control.measuredRPM = 2000
+        XCTAssertEqual(control.rotorRate, 1, accuracy: 1e-9, "Spin-down follows the hardware")
+        func repeatingAnimations(_ layer: CALayer) -> Int {
+            let own = (layer.animationKeys() ?? []).compactMap { layer.animation(forKey: $0) }.filter { $0.repeatCount > 0 }.count
+            return own + (layer.sublayers ?? []).reduce(0) { $0 + repeatingAnimations($1) }
+                + (layer.mask.map { repeatingAnimations($0) } ?? 0)
+        }
+        // Below full cooling only the rotors repeat; finite feedback (the
+        // ghost marker) is legitimate.
+        XCTAssertEqual(repeatingAnimations(control.layer!), count)
+        control.effects = EffectsProfile(level: .subtle, reduceMotion: false, reduceTransparency: false)
+        XCTAssertEqual(control.rotorRate, 1, accuracy: 1e-9, "Subtle changes appearance, never the RPM scale")
+
+        func assertStill(_ message: String) {
+            XCTAssertFalse(control.isRotorSpinning, message); XCTAssertEqual(control.rotorAnimationCount, 0, message)
+            XCTAssertEqual(control.rotorRate, 0, message)
+        }
+        control.effects = EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false); assertStill("Effects Off")
+        control.effects = expressive; XCTAssertTrue(control.isRotorSpinning)
+        control.effects = EffectsProfile(level: .expressive, reduceMotion: true, reduceTransparency: false); assertStill("Reduce Motion")
+        control.effects = expressive
+        control.measuredRPM = 0; assertStill("A stopped fan")
+        control.measuredRPM = 1500; XCTAssertTrue(control.isRotorSpinning)
+        control.isUnavailable = true; assertStill("Stale data")
+        control.isUnavailable = false; XCTAssertTrue(control.isRotorSpinning)
+        control.measuredRPM = nil; assertStill("Unknown RPM")
+        control.measuredRPM = 1500
+        control.isEnabled = false; assertStill("Disabled")
+        control.isEnabled = true; XCTAssertTrue(control.isRotorSpinning)
+        control.prepareForHiding(); assertStill("Hidden")
+        XCTAssertEqual(control.transientAnimationCount, 0)
+        control.ambientActive = true; XCTAssertTrue(control.isRotorSpinning, "Shown again, the row resumes")
+        control.ambientActive = false; assertStill("Settings open hides the slider")
+        control.ambientActive = true
+        control.removeFromSuperview(); assertStill("Detached")
+    }
+
+    /// Switching style never commands the fan. Only the Channel has rotors;
+    /// the Dot Grid has no fan graphics and no repeating motion below 100%.
+    func testRotorsBelongToTheChannelAndStyleSwitchNeverCommands() {
+        let (window, control) = hostedSlider(); _ = window
+        var commits: [Double] = []
+        control.commit = { commits.append($0) }
+        control.measuredRPM = 3000; control.ambientActive = true
+        for style in [SliderStyle.dotGrid, .channel, .dotGrid, .channel] {
+            control.style = style
+            if style == .channel {
+                XCTAssertTrue(control.isRotorSpinning); XCTAssertEqual(control.rotorRate, 1.5, accuracy: 1e-9)
+            } else {
+                XCTAssertFalse(control.isRotorSpinning); XCTAssertEqual(control.rotorAnimationCount, 0)
+            }
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertTrue(commits.isEmpty)
+    }
+
+    /// At 100% the formed ice keeps flowing while shown, in both styles: a
+    /// small fixed set of compositor loops that freeze on hide, Settings,
+    /// stale or disabled data, Effects Off, Reduce Motion and leaving 100%,
+    /// and resume without restarting the transients.
+    func testFullCoolingFlowsOnlyWhileShownAndAllowed() {
+        for style in SliderStyle.allCases {
+            let (window, control) = hostedSlider(); _ = window
+            control.style = style
+            control.setPercent(100, animated: false)
+            XCTAssertTrue(control.isIceFormed)
+            XCTAssertFalse(control.isIceFlowing, "\(style): hidden, nothing loops")
+            control.ambientActive = true
+            XCTAssertTrue(control.isIceFlowing, "\(style): formed and shown, the ice flows")
+            let loops = control.flowAnimationCount
+            XCTAssertGreaterThan(loops, 0); XCTAssertLessThanOrEqual(loops, 4, "\(style): a small fixed set")
+            control.setPercent(100, animated: true)
+            XCTAssertEqual(control.flowAnimationCount, loops, "\(style): polling at 100% never restarts or stacks it")
+            func assertFrozen(_ message: String) {
+                XCTAssertFalse(control.isIceFlowing, "\(style): \(message)"); XCTAssertEqual(control.flowAnimationCount, 0, "\(style): \(message)")
+            }
+            control.ambientActive = false; assertFrozen("Settings open or hidden")
+            control.ambientActive = true; XCTAssertTrue(control.isIceFlowing)
+            control.isUnavailable = true; assertFrozen("stale")
+            control.isUnavailable = false; control.isEnabled = false; assertFrozen("disabled")
+            control.isEnabled = true
+            control.effects = EffectsProfile(level: .expressive, reduceMotion: true, reduceTransparency: false); assertFrozen("Reduce Motion")
+            XCTAssertTrue(control.isIceFormed, "\(style): Reduce Motion keeps the ice, still")
+            control.effects = EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false); assertFrozen("Effects Off")
+            control.effects = EffectsProfile(level: .subtle, reduceMotion: false, reduceTransparency: false)
+            XCTAssertTrue(control.isIceFlowing, "\(style): Subtle flows, calmer")
+            control.setPercent(80, animated: false); assertFrozen("below full cooling")
+            control.setPercent(100, animated: false); XCTAssertTrue(control.isIceFlowing)
+            control.prepareForHiding(); assertFrozen("hidden")
+            XCTAssertEqual(control.transientAnimationCount, 0)
+            control.ambientActive = true; control.removeFromSuperview(); assertFrozen("detached")
+        }
+    }
+
+    /// Total frost: reaching 100% by drag crawls the ice in, and leaving it
+    /// recedes it from what is on screen in both styles.
+    func testTotalFrostCrawlsInAndRecedes() {
+        for style in SliderStyle.allCases {
+            let (window, control) = hostedSlider(); _ = window
+            control.style = style
+            control.setPercent(100, animated: true, celebrate: true)
+            XCTAssertTrue(control.isIceFormed, "\(style)")
+            XCTAssertTrue(control.layer?.sublayers?.contains { $0.mask?.animation(forKey: "form") != nil } == true, "\(style): the front crawls")
+            control.prepareForHiding()
+            XCTAssertTrue(control.isIceFormed, "\(style): formed ice is static state")
+            control.setPercent(60, animated: true)
+            XCTAssertFalse(control.isIceFormed)
+            XCTAssertTrue(control.layer?.sublayers?.contains { $0.mask?.animation(forKey: "melt") != nil } == true, "\(style): the front recedes")
+            control.prepareForHiding()
+            XCTAssertEqual(control.transientAnimationCount, 0)
+        }
+    }
 }
 
 @MainActor final class ModeSwitchTests: XCTestCase {
-    func testPillFollowsModeAndButtonsKeepTheirLabels() {
-        let auto = SoftButton("Auto") {}, manual = SoftButton("Manual") {}
-        auto.setAccessibilityLabel("Restore automatic fan control"); manual.setAccessibilityLabel("Manual fan control")
-        let control = ModeSwitch(auto: auto, manual: manual)
-        control.frame = NSRect(x: 0, y: 0, width: 128, height: 28); control.layout()
-        control.mode = .automatic
-        XCTAssertTrue(auto.selected); XCTAssertFalse(manual.selected)
-        XCTAssertEqual(auto.accessibilityRole(), .radioButton)
-        XCTAssertEqual(auto.accessibilityValue() as? NSNumber, true)
-        XCTAssertEqual(manual.accessibilityValue() as? NSNumber, false)
-        control.mode = .manual; control.pending = true
-        XCTAssertTrue(manual.selected); XCTAssertFalse(auto.selected)
-        XCTAssertEqual(auto.accessibilityValue() as? NSNumber, false)
-        XCTAssertEqual(manual.accessibilityValue() as? NSNumber, true)
+    private func make() -> (ModeSwitch, SoftButton, SoftButton, SoftButton) {
+        let auto = SoftButton("Auto") {}, smart = SoftButton("Smart") {}, manual = SoftButton("Manual") {}
+        auto.setAccessibilityLabel("Restore automatic fan control"); smart.setAccessibilityLabel("Smart cooling"); manual.setAccessibilityLabel("Manual fan control")
+        let control = ModeSwitch(auto: auto, smart: smart, manual: manual)
+        control.frame = NSRect(x: 0, y: 0, width: 186, height: 28); control.layout()
+        return (control, auto, smart, manual)
+    }
+
+    /// Exactly three choices, in order, each a radio button with its own label;
+    /// one selection at a time.
+    func testThreeChoicesInOrderWithOneSelection() {
+        let (control, auto, smart, manual) = make()
+        XCTAssertLessThan(auto.frame.minX, smart.frame.minX)
+        XCTAssertLessThan(smart.frame.minX, manual.frame.minX)
+        XCTAssertEqual(manual.frame.maxX, 186)
+        for (mode, chosen) in [(ModeSwitch.Mode.automatic, auto), (.smart, smart), (.manual, manual)] {
+            control.mode = mode
+            for button in [auto, smart, manual] {
+                XCTAssertEqual(button.accessibilityRole(), .radioButton)
+                XCTAssertEqual(button.accessibilityValue() as? NSNumber, NSNumber(value: button === chosen))
+            }
+        }
         control.mode = .none
-        XCTAssertFalse(auto.selected || manual.selected)
-        XCTAssertEqual(auto.accessibilityLabel(), "Restore automatic fan control")
-        XCTAssertEqual(manual.accessibilityLabel(), "Manual fan control")
+        XCTAssertFalse(auto.selected || smart.selected || manual.selected)
+        XCTAssertEqual(smart.accessibilityLabel(), "Smart cooling")
+    }
+
+    /// Choosing Smart plays one finite flourish; nothing keeps running, and
+    /// Reduce Motion (no window here, or effects off) plays nothing.
+    func testSmartFlourishIsFiniteAndOnlyOnEntry() {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 40), styleMask: .borderless, backing: .buffered, defer: false)
+        let (control, _, _, _) = make()
+        control.frame = NSRect(x: 0, y: 0, width: 200, height: 40)
+        window.contentView!.addSubview(control)
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        window.contentView!.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        CATransaction.flush()
+        control.mode = .automatic
+        control.mode = .smart
+        func animations(_ layer: CALayer?) -> [CAAnimation] {
+            guard let layer else { return [] }
+            return (layer.animationKeys() ?? []).compactMap { layer.animation(forKey: $0) } + (layer.sublayers ?? []).flatMap { animations($0) }
+        }
+        let running = animations(control.layer)
+        if Theme.effects.animates {
+            XCTAssertFalse(running.isEmpty)
+            XCTAssertTrue(running.allSatisfy { $0.duration.isFinite && $0.duration > 0 && $0.duration < 2 && $0.repeatCount == 0 }, "Finite, never looping")
+        }
+        control.saturated = true
+        XCTAssertTrue(control.smartButton.selected)
+    }
+
+    func testPendingManualAndSaturatedSmartTints() {
+        let (control, _, smart, manual) = make()
+        control.mode = .manual; control.pending = true
+        XCTAssertTrue(manual.selected)
+        control.mode = .smart; control.saturated = true
+        XCTAssertTrue(smart.selected); XCTAssertFalse(manual.selected)
     }
 }
 
@@ -396,4 +659,6 @@ import XCTest
         row.showFloorWarning(false, minimum: 21)
         XCTAssertNil(row.value.toolTip)
     }
+
+
 }

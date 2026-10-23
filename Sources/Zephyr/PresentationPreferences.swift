@@ -38,7 +38,7 @@ enum EffectsLevel: String, CaseIterable {
 /// same control with the same values, hardware floor, measured mark, input
 /// and commits. Choosing one never sends anything to the fan.
 enum SliderStyle: String, CaseIterable {
-    /// A coolant channel with a glass thumb (default).
+    /// A coolant channel with a glass thumb.
     case channel
     /// The original lattice of dots with a slim white handle.
     case dotGrid
@@ -51,6 +51,9 @@ enum SliderStyle: String, CaseIterable {
     func percent(atX x: CGFloat, width: CGFloat) -> Double {
         self == .channel ? SliderGeometry.percent(atX: x, width: width) : DotGridGeometry.percent(atX: x, width: width)
     }
+    /// Height the panel gives the control. The Dot Grid keeps its original
+    /// 34 pt; the Channel's thick tube, knob and rime need more.
+    var frameHeight: CGFloat { self == .channel ? SliderGeometry.frameHeight : DotGridGeometry.frameHeight }
 }
 
 /// What the interface may draw and animate right now. The user's level sets
@@ -79,13 +82,18 @@ struct EffectsProfile: Equatable {
     /// Speed wake behind a moving thumb and ripples on grab, release and
     /// preset detents. Expressive only.
     let wake: Bool
+    /// Continuous ambient motion, 0...1: whether the Channel's rotors turn
+    /// and the full-cooling ice flows, and how present that flow is (Subtle
+    /// is calmer and fainter). Rotor *speed* never depends on it: it always
+    /// follows the real fan. Zero with Effects Off or Reduce Motion.
+    let ambient: Double
 
     init(level: EffectsLevel, reduceMotion: Bool, reduceTransparency: Bool) {
         let light: Double = reduceTransparency ? 0.5 : 1
         switch level {
-        case .off: glow = 0; aura = 0; frost = 0; motion = 0
-        case .subtle: glow = 0.55 * light; aura = 0.6 * light; frost = 0.6 * light; motion = reduceMotion ? 0 : 0.45
-        case .expressive: glow = 1 * light; aura = 1 * light; frost = 1 * light; motion = reduceMotion ? 0 : 1
+        case .off: glow = 0; aura = 0; frost = 0; motion = 0; ambient = 0
+        case .subtle: glow = 0.55 * light; aura = 0.6 * light; frost = 0.6 * light; motion = reduceMotion ? 0 : 0.45; ambient = reduceMotion ? 0 : 0.55
+        case .expressive: glow = 1 * light; aura = 1 * light; frost = 1 * light; motion = reduceMotion ? 0 : 1; ambient = reduceMotion ? 0 : 1
         }
         animates = !reduceMotion
         rolls = !reduceMotion && level != .off
@@ -159,7 +167,7 @@ final class PresentationPreferences {
         menuBarSpacing = defaults.string(forKey: Key.menuBarSpacing).flatMap(MenuBarSpacing.init(rawValue:)) ?? .compact
         effects = defaults.string(forKey: Key.effects).flatMap(EffectsLevel.init(rawValue:)) ?? .expressive
         heatColor = defaults.object(forKey: Key.heatColor) as? Bool ?? true
-        sliderStyle = defaults.string(forKey: Key.sliderStyle).flatMap(SliderStyle.init(rawValue:)) ?? .channel
+        sliderStyle = defaults.string(forKey: Key.sliderStyle).flatMap(SliderStyle.init(rawValue:)) ?? .dotGrid
     }
 
     private func store(_ value: Any, _ key: String, changed: Bool) {
@@ -216,9 +224,16 @@ enum SliderEnergy {
 enum SliderGeometry {
     /// Room at both ends for the halo, ripples and rim crystals.
     static let inset: CGFloat = 16
-    /// The recessed channel the coolant runs in.
-    static let channelHeight: CGFloat = 12
-    static let thumb = CGSize(width: 12, height: 24)
+    /// The glass tube the coolant runs in.
+    static let channelHeight: CGFloat = 28
+    /// The knob stands 5 pt proud of the tube above and below.
+    static let thumb = CGSize(width: 20, height: 38)
+    /// Control height in the panel: the tube plus room for rime and crystals.
+    static let frameHeight: CGFloat = 52
+    /// Coolant sits inside the glass wall, inset this much from the tube.
+    static let wall: CGFloat = 3
+    /// Etched scale marks, in percent; the middle one is longer.
+    static let ticks: [Double] = [10, 20, 30, 40, 50, 60, 70, 80, 90]
 
     static func channel(in bounds: CGRect) -> CGRect {
         CGRect(x: bounds.minX + inset, y: bounds.minY + ((bounds.height - channelHeight) / 2).rounded(.down),
@@ -235,15 +250,28 @@ enum SliderGeometry {
         Double((x - inset - thumb.width / 2) / travel(width: width)) * 100
     }
     static func travel(width: CGFloat) -> CGFloat { max(1, width - 2 * inset - thumb.width) }
+
+    /// Miniature rotors inside the coolant: diameter and evenly spaced
+    /// centres along the channel (channel-local x, centred vertically).
+    static let rotorDiameter: CGFloat = 16
+    static let rotorPitch: CGFloat = 34
+    static func rotorCenters(channelWidth width: CGFloat) -> [CGPoint] {
+        let usable = width - channelHeight
+        guard usable > rotorPitch else { return [] }
+        let count = Int((usable / rotorPitch).rounded(.down)) + 1
+        let step = usable / CGFloat(max(1, count - 1))
+        return (0..<count).map { CGPoint(x: channelHeight / 2 + CGFloat($0) * step, y: channelHeight / 2) }
+    }
 }
 
-/// The original dot-grid slider's geometry: five rows of 2 pt dots on a 3 pt
-/// pitch, centred in the control with 16 pt of room at both ends. The thumb
-/// centre sits on a column centre at 0% and 100%.
+/// The Dot Grid's geometry: seven rows of 2.6 pt dots on a 4 pt pitch,
+/// centred in a 50 pt frame with 16 pt of room at both ends. The thumb centre
+/// sits on a column centre at 0% and 100%.
 enum DotGridGeometry {
-    static let dot: CGFloat = 2, pitch: CGFloat = 3, rows = 5
+    static let dot: CGFloat = 2.6, pitch: CGFloat = 4, rows = 7
     static let inset: CGFloat = 16
-    static let thumb = CGSize(width: 6, height: 20)
+    static let thumb = CGSize(width: 9, height: 38)
+    static let frameHeight: CGFloat = 50
 
     static func columns(width: CGFloat) -> Int { max(2, Int(((width - 2 * inset - dot) / pitch).rounded(.down)) + 1) }
     /// The lattice inside bounds at the origin (as the control lays it out).
@@ -259,6 +287,81 @@ enum DotGridGeometry {
     static func percent(atX x: CGFloat, width: CGFloat) -> Double {
         let grid = grid(width: width, height: 1)
         return Double((x - grid.minX - dot / 2) / max(1, grid.width - dot)) * 100
+    }
+}
+
+/// The Channel's miniature rotors turn in proportion to the fan's *actual*
+/// speed: the measured RPM from the hardware, never the slider, the target
+/// or Smart's request, so they spin up and down with the real rotor.
+///
+/// Scale: one visual revolution per second for every `rpmPerTurn` RPM, so
+/// the rotors turn at 1/33 of the real fan (`RPM / 2000` rev/s: 1200 RPM →
+/// 0.6 rev/s, 4900 RPM → 2.45 rev/s). A literal 1000–4900 RPM (17–82 rev/s)
+/// would alias on a 60/120 Hz display; at this scale a five-blade rotor
+/// turns at most 24° per 60 Hz frame (under the 36° aliasing limit of its
+/// 72° symmetry) up to the `fastest` guard. Zero RPM stands still. The same
+/// scale applies at every effects level; intensity changes appearance only.
+enum RotorMotion {
+    static let rpmPerTurn = 2000.0
+    /// Ceiling in rev/s (8000 RPM, beyond any Mac fan): guards against
+    /// implausible telemetry and aliasing.
+    static let fastest = 4.0
+
+    static func revolutionsPerSecond(rpm: Double?) -> Double {
+        guard let rpm, rpm.isFinite, rpm > 0 else { return 0 }
+        return min(fastest, rpm / rpmPerTurn)
+    }
+    /// Spinning needs a visible panel, an enabled control with fresh
+    /// telemetry, a turning fan and motion allowed by Effects and Reduce
+    /// Motion.
+    static func spins(visible: Bool, enabled: Bool, available: Bool, rpm: Double?, effects: EffectsProfile) -> Bool {
+        visible && enabled && available && effects.ambient > 0 && revolutionsPerSecond(rpm: rpm) > 0
+    }
+}
+
+/// The continuous full-cooling motion: at 100% the ice keeps flowing (cold
+/// currents and glints in the Channel, light rolling through the crystal
+/// lattice in the Dot Grid). Bounded compositor loops that run only while
+/// the panel is visible, the control is enabled with fresh data, the ice is
+/// formed, and Effects allow motion; otherwise they freeze in place.
+enum IceFlow {
+    static func runs(visible: Bool, enabled: Bool, available: Bool, frozen: Bool, effects: EffectsProfile) -> Bool {
+        visible && enabled && available && frozen && effects.ambient > 0 && effects.frost > 0
+    }
+    /// Time scale for every loop: 1 on Expressive, longer (calmer) on Subtle.
+    static func pace(effects: EffectsProfile) -> Double { 1 / max(0.3, min(1, effects.ambient)) }
+    /// How present the flow is (opacity), 0...1.
+    static func strength(effects: EffectsProfile) -> Double { max(0, min(1, effects.ambient)) * (0.5 + 0.5 * max(0, min(1, effects.frost))) }
+}
+
+/// How much of the track the full-cooling ice covers, by position (0 at
+/// the start of the track, 1 at its end). At 100% the whole track freezes:
+/// the ice is thickest at the thumb end and never thinner than `edge`, so
+/// it reads as one sheet, not crystals huddled near the thumb.
+enum IceCover {
+    static let edge = 0.85
+    static func weight(at fraction: Double) -> Double {
+        guard fraction.isFinite else { return edge }
+        let t = max(0, min(1, fraction))
+        return edge + (1 - edge) * t * t * (3 - 2 * t)
+    }
+    /// Whether crossing into full cooling plays the formation. It plays for
+    /// every crossing the person can see happen: a drag, a click or preset,
+    /// and an external value (Smart) gliding to 100% while the panel is
+    /// open. Keyboard and VoiceOver steps, refreshes while hidden or at
+    /// startup (all unanimated) show the ice at once, and a value that stays
+    /// at 100% never crosses, so polling never replays it. Expressive only
+    /// (`EffectsProfile.forms`, off with Reduce Motion).
+    static func forms(animated: Bool, allowed: Bool) -> Bool { animated && allowed }
+    /// The freezing front's growth spurts as (fraction of the formation
+    /// time, fraction of the track reached): fast, a pause, fast again,
+    /// settling. Both styles crawl to this.
+    static let crawl: [(time: Double, reach: Double)] = [(0, 0), (0.16, 0.22), (0.28, 0.25), (0.5, 0.58), (0.6, 0.61), (0.82, 0.9), (1, 1)]
+    /// The crawl resumed from a front already at `reach` (a formation that
+    /// interrupts a melt continues from what is on screen).
+    static func crawl(from reach: Double) -> [(time: Double, reach: Double)] {
+        let start = reach.isFinite ? max(0, min(1, reach)) : 0
+        return crawl.map { ($0.time, start + (1 - start) * $0.reach) }
     }
 }
 

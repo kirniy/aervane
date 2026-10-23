@@ -17,7 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var outsideMonitor: Any?
     private var localMonitor: Any?
     private var ending = false
-    private var glass: NSView?
+    private var surface: PanelSurface!
+    /// Content height last asked for by the panel view (the body, without the pointer).
+    private var bodyHeight: CGFloat = 300
+    /// Frame the panel is at or animating to.
+    private var panelTarget: NSRect?
     private var observers: [NSObjectProtocol] = []
     /// Heat band for the menu bar, kept current while the panel is closed.
     private var statusThermal = ThermalState.unknown
@@ -38,9 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.acceptsMouseMovedEvents = true
         panel.animationBehavior = .none
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true; panel.level = .popUpMenu; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.isMovable = false; panel.hidesOnDeactivate = false
-        let surface = PanelSurface(content: content)
+        surface = PanelSurface(content: content)
         panel.contentView = surface
-        glass = surface.material
         // Escape peels one layer (an open preset editor cancels) before closing.
         panel.escape = { [weak self] in guard let self, !self.content.dismissTopLayer() else { return }; self.hide() }
         panel.initialFirstResponder = content.preferredFirstResponder
@@ -52,8 +55,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }; self.content.applyPresentation(); self.tintGlass(for: self.content.thermal); self.updateStatusItem()
         })
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self else { return }; self.content.applyPresentation(); self.tintGlass(for: self.content.thermal)
+            guard let self else { return }; self.content.applyPresentation(); self.tintGlass(for: self.content.thermal); self.surface.updateColors()
         })
+        // An open panel follows its item when the menu bar rearranges (other
+        // items resizing) or displays change. Event-driven; nothing polls.
+        for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification, NSApplication.didChangeScreenParametersNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                guard let self, self.panel.isVisible else { return }
+                if let window = note.object as? NSWindow, window !== self.item.button?.window { return }
+                self.positionPanel()
+            })
+        }
         if CommandLine.arguments.contains("--show") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.show() } }
         if CommandLine.arguments.contains("--enable-helper") { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.show(); self.model.enableControl() } }
     }
@@ -88,13 +100,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.setAccessibilityValue("\(sensor) \(model.temperatureText)\(model.temperatureUnit)")
     }
 
-    /// On macOS 26 the glass itself carries a faint heat tint when the
-    /// reading is warm or hotter. Reduce Transparency keeps it untinted.
+    /// The panel material, pointer included, carries a faint heat tint when
+    /// the reading is warm or hotter. Reduce Transparency keeps it untinted.
     private func tintGlass(for state: ThermalState) {
-        guard #available(macOS 26.0, *), let glass = glass as? NSGlassEffectView else { return }
         let prefs = PresentationPreferences.shared
         let tinted = prefs.heatColor && prefs.effects != .off && !Theme.reduceTransparency && state >= .warm
-        glass.tintColor = tinted ? Theme.heat(state).withAlphaComponent(state == .warm ? 0.06 : state == .hot ? 0.09 : 0.12) : nil
+        surface.tint = tinted ? Theme.heat(state).withAlphaComponent(state == .warm ? 0.06 : state == .hot ? 0.09 : 0.12) : nil
     }
     private func installKeyboardCommands() {
         // Accessory apps still need an Edit menu for the field editor's native
@@ -150,19 +161,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }; outsideMonitor = nil
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }; localMonitor = nil
     }
-    private func positionPanel() {
-        guard let button = item.button, let window = button.window else { return }
-        let rect = window.convertToScreen(button.convert(button.bounds, to: nil)), screen = window.screen ?? NSScreen.main!
-        let x = min(max(screen.visibleFrame.minX + 8, rect.midX - panel.frame.width / 2), screen.visibleFrame.maxX - panel.frame.width - 8)
-        // Keep the panel close to its highlighted trigger. Align the surface
-        // to device pixels so its edge stays crisp on both 1× and 2× screens.
-        let y = max(screen.visibleFrame.minY + 8, rect.minY - panel.frame.height - 2)
-        let scale = screen.backingScaleFactor
-        panel.setFrameOrigin(.init(x: (x * scale).rounded() / scale, y: (y * scale).rounded() / scale))
+    /// Where a body of `height` goes: hanging from the status item with
+    /// room below the menu bar and from the screen edges, its pointer on the
+    /// item, aligned to the item's screen's pixels (see `PanelPlacement`).
+    private func placement(bodyHeight height: CGFloat) -> PanelPlacement? {
+        guard let button = item.button, let window = button.window else { return nil }
+        let anchor = window.convertToScreen(button.convert(button.bounds, to: nil)), screens = NSScreen.screens
+        guard let screen = PanelPlacement.screenIndex(for: anchor, in: screens.map(\.frame)).map({ screens[$0] }) ?? window.screen ?? NSScreen.main else { return nil }
+        return PanelPlacement(anchor: anchor, visibleFrame: screen.visibleFrame, bodySize: NSSize(width: PanelView.width, height: height), scale: screen.backingScaleFactor)
     }
+    private func positionPanel() {
+        guard let place = placement(bodyHeight: bodyHeight) else { return }
+        surface.pointerX = place.pointerX
+        panelTarget = place.frame
+        if panel.frame != place.frame { panel.setFrame(place.frame, display: panel.isVisible); panel.invalidateShadow() }
+    }
+    /// `height` is the panel view's content height; the window adds the
+    /// pointer above it, so content is never compressed. The top edge and
+    /// pointer stay put while the body grows or shrinks.
     private func resize(_ height: CGFloat) {
-        guard abs(panel.frame.height - height) > 1 else { return }
-        var frame = panel.frame; frame.origin.y += frame.height - height; frame.size.height = height
+        bodyHeight = height
+        var frame: NSRect
+        if let place = placement(bodyHeight: height) {
+            surface.pointerX = place.pointerX; frame = place.frame
+        } else {
+            frame = panel.frame; let total = height + PanelMetrics.standard.pointerHeight
+            frame.origin.y += frame.height - total; frame.size.height = total
+        }
+        guard frame != panelTarget else { return }
+        panelTarget = frame
         if panel.isVisible && !Theme.reduceMotion {
             NSAnimationContext.runAnimationGroup({
                 $0.duration = 0.18; $0.timingFunction = Theme.Ease.out

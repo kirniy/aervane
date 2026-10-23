@@ -35,20 +35,20 @@ final class PresentationPreferencesTests: XCTestCase {
         XCTAssertFalse(reloaded.heatColor)
     }
 
-    /// The slider style is a persisted presentation choice: Channel by
-    /// default, Dot Grid kept as the original look.
-    func testSliderStyleDefaultsToChannelAndPersists() {
+    /// The slider style is a persisted presentation choice: Dot Grid by
+    /// default, with Channel available as an alternative.
+    func testSliderStyleDefaultsToDotGridAndPersists() {
         let center = NotificationCenter()
         var notes = 0
         let token = center.addObserver(forName: PresentationPreferences.didChange, object: nil, queue: nil) { _ in notes += 1 }
         defer { center.removeObserver(token) }
         let prefs = PresentationPreferences(defaults: defaults, center: center)
-        XCTAssertEqual(prefs.sliderStyle, .channel)
-        prefs.sliderStyle = .dotGrid; prefs.sliderStyle = .dotGrid
+        XCTAssertEqual(prefs.sliderStyle, .dotGrid)
+        prefs.sliderStyle = .channel; prefs.sliderStyle = .channel
         XCTAssertEqual(notes, 1)
-        XCTAssertEqual(PresentationPreferences(defaults: defaults, center: center).sliderStyle, .dotGrid)
-        defaults.set("velvet", forKey: PresentationPreferences.Key.sliderStyle)
         XCTAssertEqual(PresentationPreferences(defaults: defaults, center: center).sliderStyle, .channel)
+        defaults.set("velvet", forKey: PresentationPreferences.Key.sliderStyle)
+        XCTAssertEqual(PresentationPreferences(defaults: defaults, center: center).sliderStyle, .dotGrid)
         XCTAssertEqual(SliderStyle.allCases.map(\.title), ["Channel", "Dot Grid"])
     }
 
@@ -154,7 +154,7 @@ final class PresentationPreferencesTests: XCTestCase {
 
 final class SliderGeometryTests: XCTestCase {
     func testChannelIsCentredAndTheThumbStaysInsideIt() {
-        let bounds = CGRect(x: 0, y: 0, width: 344, height: 34)
+        let bounds = CGRect(x: 0, y: 0, width: 344, height: SliderGeometry.frameHeight)
         let channel = SliderGeometry.channel(in: bounds)
         XCTAssertEqual(channel.height, SliderGeometry.channelHeight)
         XCTAssertEqual(channel.minX, SliderGeometry.inset)
@@ -164,9 +164,17 @@ final class SliderGeometryTests: XCTestCase {
         XCTAssertEqual(SliderGeometry.x(percent: 100, width: 344) + SliderGeometry.thumb.width / 2, channel.maxX)
         XCTAssertEqual(SliderGeometry.x(percent: -20, width: 344), SliderGeometry.x(percent: 0, width: 344))
         XCTAssertEqual(SliderGeometry.x(percent: .nan, width: 344), SliderGeometry.x(percent: 0, width: 344))
-        // The thumb is taller than the channel, so it reads as a handle on it.
-        XCTAssertGreaterThan(SliderGeometry.thumb.height, SliderGeometry.channelHeight * 1.5)
-        XCTAssertLessThanOrEqual(SliderGeometry.thumb.height, bounds.height)
+        // A thick tube with a knob that stands proud of it, inside the frame
+        // with room for rime above and below.
+        XCTAssertGreaterThanOrEqual(SliderGeometry.channelHeight, 28)
+        XCTAssertGreaterThan(SliderGeometry.thumb.height, SliderGeometry.channelHeight)
+        XCTAssertLessThanOrEqual(SliderGeometry.thumb.height + 12, bounds.height)
+        XCTAssertGreaterThan(SliderGeometry.channelHeight - 2 * SliderGeometry.wall, SliderGeometry.channelHeight / 2)
+        XCTAssertEqual(SliderStyle.dotGrid.frameHeight, DotGridGeometry.frameHeight)
+        XCTAssertGreaterThanOrEqual(SliderStyle.dotGrid.frameHeight, 48, "The Dot Grid is now a tall control, not the old 34 pt strip")
+        XCTAssertEqual(SliderStyle.channel.frameHeight, SliderGeometry.frameHeight)
+        XCTAssertEqual(SliderGeometry.ticks, SliderGeometry.ticks.sorted())
+        XCTAssertTrue(SliderGeometry.ticks.allSatisfy { (0...100).contains($0) })
     }
 
     func testPointerMappingRoundTrips() {
@@ -181,19 +189,25 @@ final class SliderGeometryTests: XCTestCase {
 }
 
 final class DotGridGeometryTests: XCTestCase {
-    /// The restored style keeps the original lattice mapping exactly
-    /// (7bd4997: 3 pt pitch, 2 pt dots, centred, 16 pt ends).
-    func testLatticeMatchesTheOriginalControl() {
-        XCTAssertEqual(DotGridGeometry.columns(width: 372), 113)
-        let grid = DotGridGeometry.grid(width: 372, height: 34)
-        XCTAssertEqual(grid, CGRect(x: 17, y: 10, width: 338, height: 14))
-        XCTAssertEqual(DotGridGeometry.x(percent: 0, width: 372), 18)
-        XCTAssertEqual(DotGridGeometry.x(percent: 100, width: 372), 354)
-        XCTAssertEqual(DotGridGeometry.x(percent: 150, width: 372), 354)
-        XCTAssertEqual(DotGridGeometry.x(percent: .nan, width: 372), 18)
-        XCTAssertEqual(DotGridGeometry.thumb, CGSize(width: 6, height: 20))
-        for p in stride(from: 0.0, through: 100, by: 9) {
-            XCTAssertEqual(DotGridGeometry.percent(atX: DotGridGeometry.x(percent: p, width: 344), width: 344), p, accuracy: 1e-9)
+    /// A tall lattice, centred, with the handle standing proud of it and
+    /// inside the frame.
+    func testTallLatticeIsCentredAndHoldsTheHandle() {
+        XCTAssertEqual(DotGridGeometry.columns(width: 344), 78)
+        let grid = DotGridGeometry.grid(width: 344, height: DotGridGeometry.frameHeight)
+        XCTAssertEqual(grid.minX, 16); XCTAssertEqual(grid.minY, 11)
+        XCTAssertEqual(grid.width, 310.6, accuracy: 1e-9); XCTAssertEqual(grid.height, 26.6, accuracy: 1e-9)
+        XCTAssertEqual(DotGridGeometry.rows, 7)
+        XCTAssertEqual(DotGridGeometry.x(percent: 0, width: 344), 17.3, accuracy: 1e-9)
+        XCTAssertEqual(DotGridGeometry.x(percent: 100, width: 344), 325.3, accuracy: 1e-9)
+        XCTAssertEqual(DotGridGeometry.x(percent: 150, width: 344), DotGridGeometry.x(percent: 100, width: 344))
+        XCTAssertEqual(DotGridGeometry.x(percent: .nan, width: 344), DotGridGeometry.x(percent: 0, width: 344))
+        XCTAssertEqual(DotGridGeometry.thumb, CGSize(width: 9, height: 38))
+        XCTAssertGreaterThan(DotGridGeometry.thumb.height, grid.height + 8, "The handle stands proud of the lattice")
+        XCTAssertLessThanOrEqual(DotGridGeometry.thumb.height + 10, DotGridGeometry.frameHeight, "Room for the handle's shadow and frost")
+        for width in [200.0, 344, 512] as [CGFloat] {
+            for p in stride(from: 0.0, through: 100, by: 9) {
+                XCTAssertEqual(DotGridGeometry.percent(atX: DotGridGeometry.x(percent: p, width: width), width: width), p, accuracy: 1e-9)
+            }
         }
     }
 
@@ -212,6 +226,138 @@ final class DotGridGeometryTests: XCTestCase {
     func testDotSizeStaysWithinTheLattice() {
         XCTAssertLessThan(SliderEnergy.dotSize(percent: 0), SliderEnergy.dotSize(percent: 100))
         XCTAssertLessThanOrEqual(SliderEnergy.dotSize(percent: 100), 2.4)
+        // Lit dots are drawn 1.25× larger and must never touch.
+        XCTAssertLessThan(SliderEnergy.dotSize(percent: 100) * 1.25, DotGridGeometry.pitch - 0.5)
+    }
+}
+
+final class RotorMotionTests: XCTestCase {
+    private let expressive = EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: false)
+    private let subtle = EffectsProfile(level: .subtle, reduceMotion: false, reduceTransparency: false)
+
+    /// The rotors turn in proportion to the fan's actual RPM: one visual
+    /// revolution per second per 2000 RPM, under the aliasing guard.
+    func testSpinIsProportionalToActualRPM() {
+        XCTAssertEqual(RotorMotion.revolutionsPerSecond(rpm: 1200), 0.6, accuracy: 1e-12)
+        XCTAssertEqual(RotorMotion.revolutionsPerSecond(rpm: 4900), 2.45, accuracy: 1e-12)
+        for rpm in stride(from: 100.0, through: 7900, by: 100) {
+            XCTAssertEqual(RotorMotion.revolutionsPerSecond(rpm: rpm) / RotorMotion.revolutionsPerSecond(rpm: 1000), rpm / 1000, accuracy: 1e-9,
+                           "Twice the RPM, twice the visual speed")
+        }
+        XCTAssertEqual(RotorMotion.revolutionsPerSecond(rpm: 20_000), RotorMotion.fastest, "Implausible telemetry is capped")
+        // A five-blade rotor repeats every 72°: under 36° per 60 Hz frame
+        // there is no wagon-wheel aliasing, even at the cap.
+        XCTAssertLessThan(RotorMotion.fastest * 360 / 60, 36)
+    }
+
+    func testActualZeroOrUnknownStandsStill() {
+        for rpm in [nil, 0, -5, .nan, .infinity] as [Double?] {
+            XCTAssertEqual(RotorMotion.revolutionsPerSecond(rpm: rpm), 0)
+        }
+        XCTAssertFalse(RotorMotion.spins(visible: true, enabled: true, available: true, rpm: 0, effects: expressive), "A stopped fan stops the rotors")
+    }
+
+    /// Effects choose whether the rotors move, never how fast: speed stays
+    /// proportional to the real fan at every level.
+    func testEffectsGateMotionButNeverRescaleSpeed() {
+        XCTAssertTrue(RotorMotion.spins(visible: true, enabled: true, available: true, rpm: 2400, effects: subtle))
+        for effects in [EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false),
+                        EffectsProfile(level: .expressive, reduceMotion: true, reduceTransparency: false),
+                        EffectsProfile(level: .subtle, reduceMotion: true, reduceTransparency: true)] {
+            XCTAssertEqual(effects.ambient, 0)
+            XCTAssertFalse(RotorMotion.spins(visible: true, enabled: true, available: true, rpm: 2400, effects: effects))
+        }
+        XCTAssertEqual(EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: true).ambient, 1,
+                       "Reduce Transparency dims light, not motion")
+    }
+
+    func testSpinsOnlyWhenShownEnabledAndFresh() {
+        XCTAssertTrue(RotorMotion.spins(visible: true, enabled: true, available: true, rpm: 2400, effects: expressive))
+        XCTAssertFalse(RotorMotion.spins(visible: false, enabled: true, available: true, rpm: 2400, effects: expressive))
+        XCTAssertFalse(RotorMotion.spins(visible: true, enabled: false, available: true, rpm: 2400, effects: expressive))
+        XCTAssertFalse(RotorMotion.spins(visible: true, enabled: true, available: false, rpm: 2400, effects: expressive))
+        XCTAssertFalse(RotorMotion.spins(visible: true, enabled: true, available: true, rpm: nil, effects: expressive))
+    }
+
+    /// The Channel's rotor row: bounded, evenly spaced, inside the tube.
+    func testChannelRotorRowIsBoundedAndInsideTheTube() {
+        for width in [120.0, 312, 480] as [CGFloat] {
+            let centres = SliderGeometry.rotorCenters(channelWidth: width), d = SliderGeometry.rotorDiameter
+            XCTAssertFalse(centres.isEmpty); XCTAssertLessThanOrEqual(centres.count, 14)
+            XCTAssertGreaterThanOrEqual(centres.first!.x - d / 2, 0); XCTAssertLessThanOrEqual(centres.last!.x + d / 2, width)
+            XCTAssertTrue(centres.allSatisfy { $0.y == SliderGeometry.channelHeight / 2 })
+            let gaps = zip(centres, centres.dropFirst()).map { $1.x - $0.x }
+            XCTAssertTrue(gaps.allSatisfy { abs($0 - gaps[0]) < 1e-9 && $0 >= SliderGeometry.rotorPitch })
+        }
+        XCTAssertTrue(SliderGeometry.rotorCenters(channelWidth: 40).isEmpty, "No room, no rotors")
+        XCTAssertLessThan(SliderGeometry.rotorDiameter, SliderGeometry.channelHeight - 2 * SliderGeometry.wall)
+    }
+}
+
+final class IceFlowTests: XCTestCase {
+    private let expressive = EffectsProfile(level: .expressive, reduceMotion: false, reduceTransparency: false)
+    private let subtle = EffectsProfile(level: .subtle, reduceMotion: false, reduceTransparency: false)
+
+    /// The full-cooling flow runs only for formed ice that is on screen,
+    /// enabled, fresh and allowed to move.
+    func testFlowRunsOnlyWhenFrozenVisibleAndAllowed() {
+        XCTAssertTrue(IceFlow.runs(visible: true, enabled: true, available: true, frozen: true, effects: expressive))
+        XCTAssertTrue(IceFlow.runs(visible: true, enabled: true, available: true, frozen: true, effects: subtle))
+        XCTAssertFalse(IceFlow.runs(visible: true, enabled: true, available: true, frozen: false, effects: expressive), "Below 100% nothing loops")
+        XCTAssertFalse(IceFlow.runs(visible: false, enabled: true, available: true, frozen: true, effects: expressive), "Hidden or Settings open")
+        XCTAssertFalse(IceFlow.runs(visible: true, enabled: false, available: true, frozen: true, effects: expressive))
+        XCTAssertFalse(IceFlow.runs(visible: true, enabled: true, available: false, frozen: true, effects: expressive), "Stale")
+        for effects in [EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false),
+                        EffectsProfile(level: .expressive, reduceMotion: true, reduceTransparency: false)] {
+            XCTAssertFalse(IceFlow.runs(visible: true, enabled: true, available: true, frozen: true, effects: effects))
+        }
+    }
+
+    /// Subtle is calmer (slower loops) and fainter.
+    func testSubtleFlowsCalmerAndFainter() {
+        XCTAssertEqual(IceFlow.pace(effects: expressive), 1)
+        XCTAssertGreaterThan(IceFlow.pace(effects: subtle), 1.5)
+        XCTAssertLessThan(IceFlow.strength(effects: subtle), IceFlow.strength(effects: expressive))
+        XCTAssertEqual(IceFlow.strength(effects: EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false)), 0)
+        XCTAssertTrue(IceFlow.pace(effects: EffectsProfile(level: .off, reduceMotion: false, reduceTransparency: false)).isFinite)
+    }
+}
+
+final class IceCoverTests: XCTestCase {
+    /// Formation needs an animated (visible) crossing and Expressive motion.
+    func testFormationPlaysOnlyForVisibleCrossings() {
+        XCTAssertTrue(IceCover.forms(animated: true, allowed: true))
+        XCTAssertFalse(IceCover.forms(animated: false, allowed: true), "Keys, hidden and startup refreshes are instant")
+        XCTAssertFalse(IceCover.forms(animated: true, allowed: false), "Subtle, Off and Reduce Motion never play it")
+    }
+
+    /// Total frost: the whole track is covered, thickest at the thumb end.
+    func testIceCoversTheWholeTrack() {
+        XCTAssertEqual(IceCover.weight(at: 0), IceCover.edge)
+        XCTAssertGreaterThanOrEqual(IceCover.edge, 0.85, "Total frost: dense across the whole track, not huddled near the thumb")
+        XCTAssertEqual(IceCover.weight(at: 1), 1)
+        var previous = 0.0
+        for f in stride(from: 0.0, through: 1, by: 0.02) {
+            let w = IceCover.weight(at: f); XCTAssertGreaterThanOrEqual(w, previous); previous = w
+        }
+        XCTAssertEqual(IceCover.weight(at: -1), IceCover.edge); XCTAssertEqual(IceCover.weight(at: 3), 1)
+        XCTAssertEqual(IceCover.weight(at: .nan), IceCover.edge)
+    }
+
+    /// The front crawls in spurts but always forward, over the whole track,
+    /// and a formation that interrupts a melt continues from where it is.
+    func testCrawlIsMonotonicAndResumable() {
+        let crawl = IceCover.crawl
+        XCTAssertEqual(crawl.first!.time, 0); XCTAssertEqual(crawl.first!.reach, 0)
+        XCTAssertEqual(crawl.last!.time, 1); XCTAssertEqual(crawl.last!.reach, 1)
+        XCTAssertTrue(zip(crawl, crawl.dropFirst()).allSatisfy { $1.time > $0.time && $1.reach >= $0.reach })
+        let speeds = zip(crawl, crawl.dropFirst()).map { ($1.reach - $0.reach) / ($1.time - $0.time) }
+        XCTAssertGreaterThan(speeds.max()! / speeds.min()!, 3, "Growth spurts, not a linear wipe")
+        let resumed = IceCover.crawl(from: 0.5)
+        XCTAssertEqual(resumed.first!.reach, 0.5); XCTAssertEqual(resumed.last!.reach, 1)
+        XCTAssertEqual(resumed.map(\.time), crawl.map(\.time))
+        XCTAssertEqual(IceCover.crawl(from: .nan).map(\.reach), crawl.map(\.reach))
+        XCTAssertEqual(IceCover.crawl(from: 7).map(\.reach), Array(repeating: 1, count: crawl.count))
     }
 }
 

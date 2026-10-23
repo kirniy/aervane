@@ -17,11 +17,23 @@ final class AppModel {
     private var sleepObservers: [NSObjectProtocol] = []
     var sample: FanSnapshot?
     var history: [Double] = []
+    /// What Smart measured on its last evaluated sample, and its own history:
+    /// a separate series so mode changes never mix different sensors.
+    private(set) var smartSample: SmartSample?
+    private(set) var smartHistory: [Double] = []
+    /// The panel's temperature: Smart's own measurement while Smart runs,
+    /// the selected sensor otherwise. The menu bar keeps the selected sensor.
+    var panelReadout: TemperatureReadout {
+        TemperatureReadout.panel(smartEnabled: control.smartEnabled, smart: smartSample, selectedSensor: selectedSensor,
+                                 selectedCelsius: displayTemperature, stale: stale, now: Date())
+    }
     var error: String?
     /// True while connecting, setting up, or while a fan command is in flight.
-    var busy: Bool { settingUp || requests.isBusy }
+    var busy: Bool { settingUp || control.isBusy }
     private var settingUp = false
-    private var requests = ControlRequestQueue()
+    /// Every fan command, Smart's session, sleep suspension and the Smart
+    /// stop notice (pure; see FanCommandCoordinator).
+    private var control: FanCommandCoordinator
     private var restoreWaiters: [() -> Void] = []
     var ownsControl = false
     var pendingPercent: Double?
@@ -35,6 +47,18 @@ final class AppModel {
     var fahrenheit: Bool { didSet { UserDefaults.standard.set(fahrenheit, forKey: "fahrenheit"); changed?() } }
     var lowPower: Bool { didSet { UserDefaults.standard.set(lowPower, forKey: "lowPower"); schedulePoll() } }
     private var returnTimer: ManualReturnTimer
+    /// Opt-in Smart cooling (off by default). Any user speed or Auto ends it.
+    var smartEnabled: Bool { control.smartEnabled }
+    /// What Smart last saw and wants, for display.
+    var smartStep: SmartCoolingController.Step? { control.smart.lastStep }
+    var smartPolicy: SmartCoolingPolicy { control.smart.controller.policy }
+    /// Why Smart last stopped on its own and whether Auto is confirmed. Kept
+    /// apart from `error` so a later successful command cannot erase it.
+    var smartNotice: String? { control.notice?.message }
+    /// The temperature Smart works to stay under, °C (kept while Smart is off).
+    var smartTarget: Double { control.smartTarget }
+    /// Smart is at full speed and the temperature is still over its target.
+    var smartSaturated: Bool { control.smartSaturated }
     var controlDeadline: Date? { returnTimer.deadline }
     var autoReturnEnabled: Bool {
         get { returnTimer.enabled }
@@ -48,7 +72,7 @@ final class AppModel {
     var minimumPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return ceil(s.minimumRPM / s.maximumRPM * 100) }
     var actualPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return min(100, max(0, s.currentRPM / s.maximumRPM * 100)) }
     /// Speed the user most recently asked for that the helper has not confirmed.
-    var requestedPercent: Double? { pendingPercent ?? requests.pendingPercent }
+    var requestedPercent: Double? { pendingPercent ?? control.pendingPercent }
     var shownPercent: Double { requestedPercent ?? sample?.targetPercent ?? actualPercent }
     var temperatureText: String { guard let temp = displayTemperature, !stale else { return "—" }; return String(Int((fahrenheit ? temp * 1.8 + 32 : temp).rounded())) }
     var temperatureUnit: String { fahrenheit ? "°F" : "°C" }
@@ -59,14 +83,21 @@ final class AppModel {
         let defaults = UserDefaults.standard
         returnTimer = ManualReturnTimer(enabled: defaults.bool(forKey: "autoReturnEnabled"),
                                        minutes: defaults.object(forKey: "autoReturnMinutes") as? Double ?? 30)
+        // A Smart choice persists across launches; a fault turns it off (and
+        // that persists too), so it never resumes after a failure on its own.
+        control = FanCommandCoordinator(smartEnabled: defaults.bool(forKey: Self.smartKey),
+                                        previousStop: defaults.string(forKey: Self.smartStopKey).flatMap(SmartStopReason.init(rawValue:)),
+                                        targetCelsius: SmartTarget.clamp(defaults.object(forKey: Self.smartTargetKey) as? Double))
         selectedSensor = defaults.string(forKey: "sensor") ?? "CPU"
         fahrenheit = defaults.bool(forKey: "fahrenheit"); lowPower = defaults.bool(forKey: "lowPower")
         if let data = defaults.data(forKey: "presets"), let saved = try? JSONDecoder().decode([FanPreset].self, from: data) {
             presets = Array(saved.filter { !$0.name.isEmpty && $0.name.count <= 20 && $0.percent.isFinite && (0...100).contains($0.percent) }.prefix(6))
         } else { presets = [FanPreset(name: "Quiet", percent: 30), FanPreset(name: "Balanced", percent: 60), FanPreset(name: "Boost", percent: 100)] }
         let center = NSWorkspace.shared.notificationCenter
-        sleepObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in if self?.ownsControl == true { self?.restore() }; self?.timer?.cancel(); self?.timer = nil })
-        sleepObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.schedulePoll() })
+        sleepObservers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in self?.willSleep() })
+        sleepObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.control.wake(); self?.schedulePoll()
+        })
         schedulePoll()
         let status = installer.status
         helperApprovalRequired = status == .requiresApproval
@@ -75,36 +106,43 @@ final class AppModel {
     deinit { for observer in sleepObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }; timer?.cancel(); heartbeat?.invalidate() }
     func schedulePoll() {
         timer?.cancel()
-        let interval: TimeInterval = panelVisible ? 1 : lowPower ? 8 : 3
+        // Smart needs fresh readings to react in time, so it keeps a 2 s
+        // cadence with the panel closed, overriding Low power.
+        let interval: TimeInterval = panelVisible ? 1 : control.smartActive ? 2 : lowPower ? 8 : 3
         let t = DispatchSource.makeTimerSource(queue: .main); t.schedule(deadline: .now(), repeating: interval, leeway: .milliseconds(panelVisible ? 150 : 700)); t.setEventHandler { [weak self] in self?.poll() }; timer = t; t.resume()
     }
     private var polling = false
     func poll() {
         // Connecting to the helper must not pause read-only telemetry. Only
         // an in-flight hardware command needs to exclude an overlapping poll.
-        guard !polling, !requests.isBusy else { return }; polling = true
+        guard !polling, !control.isBusy else { return }; polling = true
         let sensor = selectedSensor
         let generation = controlGeneration
+        // Smart's own generation: a read begun before Smart was turned on,
+        // off, suspended or resumed never drives it.
+        let smartGeneration = control.sampleGeneration
+        let wantsGPU = sensor != "CPU" || control.smartEnabled
         queue.async { [weak self] in
             guard let self else { return }
-            let result: Result<(FanSnapshot, Double?), Error> = Result {
-                let cpu = try self.reader.readCPUTemperature(), fan = try self.reader.readFan()
-                var temp: Double? = cpu
-                if sensor != "CPU" {
-                    let gpu = try? self.reader.readGPUTemperature()
-                    // An unavailable optional display sensor must not end
-                    // manual control while CPU and fan telemetry are healthy.
-                    if sensor == "GPU" { temp = gpu }
-                    else { temp = max(cpu, gpu ?? cpu) }
-                }
-                return (FanSnapshot(currentRPM: fan.currentRPM, minimumRPM: fan.minimumRPM, maximumRPM: fan.maximumRPM, targetPercent: fan.targetPercent, automatic: fan.automatic, temperatureCelsius: cpu), temp)
+            let result: Result<(FanSnapshot, Double?, SmartCoolingReading), Error> = Result {
+                let cpu = try self.reader.readCPUTemperatures(), fan = try self.reader.readFan()
+                var temp: Double? = cpu.average
+                let gpu = wantsGPU ? try? self.reader.readGPUTemperature() : nil
+                // An unavailable optional display sensor must not end
+                // manual control while CPU and fan telemetry are healthy.
+                if sensor == "GPU" { temp = gpu }
+                else if sensor != "CPU" { temp = max(cpu.average, gpu ?? cpu.average) }
+                // Smart follows the hottest core (and a hotter GPU average)
+                // whatever the menu bar shows.
+                let smartReading = SmartCoolingReading(cpuHottest: cpu.hottest, gpu: gpu)
+                return (FanSnapshot(currentRPM: fan.currentRPM, minimumRPM: fan.minimumRPM, maximumRPM: fan.maximumRPM, targetPercent: fan.targetPercent, automatic: fan.automatic, temperatureCelsius: cpu.average), temp, smartReading)
             }
             DispatchQueue.main.async {
                 self.polling = false
                 // A read begun before a fan command cannot describe its result.
                 guard generation == self.controlGeneration, sensor == self.selectedSensor else { return }
                 switch result {
-                case .success(let (snapshot, temp)):
+                case .success(let (snapshot, temp, smartReading)):
                     self.sample = snapshot; self.displayTemperature = temp
                     if self.error?.hasPrefix("Sensor:") == true { self.error = nil }
                     if let temp {
@@ -119,8 +157,15 @@ final class AppModel {
                         // not repeatedly ask a released lease to restore again.
                         self.ownsControl = false; self.returnTimer.cancel()
                         self.stopHeartbeat()
+                        self.stopSmart(.controlLost)
                     } else if self.ownsControl && self.returnTimer.isDue(now: .now) { self.restore() }
-                case .failure(let failure): self.error = "Sensor: \(failure.localizedDescription)"; self.displayTemperature = nil; if self.ownsControl { self.restore() }
+                    self.control.observe(automatic: snapshot.automatic && !self.ownsControl)
+                    self.runSmart(smartReading, generation: smartGeneration)
+                case .failure(let failure):
+                    self.error = "Sensor: \(failure.localizedDescription)"; self.displayTemperature = nil
+                    // A read that fails across sleep is not Smart's failure.
+                    if self.control.smartEnabled { if self.control.smartActive { self.stopSmart(.sensorFailed) } }
+                    else if self.ownsControl { self.restore() }
                 }
                 self.changed?()
                 if !self.helperReady, !self.busy, Date() >= self.nextReconnect {
@@ -157,7 +202,7 @@ final class AppModel {
         controlGeneration &+= 1
         // Replies from the previous connection are discarded below, so its
         // queue must not wait for them.
-        _ = requests.reset(); finishRestoreWaiters()
+        control.resetConnection(); finishRestoreWaiters()
         // Closing the old connection makes the helper restore anything that
         // session owned; this app no longer owns control after reconnecting.
         ownsControl = false; returnTimer.cancel(); stopHeartbeat()
@@ -169,11 +214,12 @@ final class AppModel {
             self.controlGeneration &+= 1
             // The helper restores Auto for a dropped session it owned, which
             // also satisfies any Auto request that was still queued here.
-            _ = self.requests.reset()
+            self.control.resetConnection()
             self.helperReady = false; self.ownsControl = false; self.settingUp = false
             self.returnTimer.cancel(); self.stopHeartbeat()
             self.error = "Fan helper disconnected. Reconnecting…"
             self.finishRestoreWaiters()
+            self.stopSmart(.helperDisconnected)
             self.changed?()
         } }
         client.snapshot { [weak self] result in DispatchQueue.main.async {
@@ -182,53 +228,168 @@ final class AppModel {
             self.changed?()
         } }
     }
+    /// A speed the user chose (slider, preset, Manual). Ends Smart first, so
+    /// nothing automated can follow or overwrite it.
     func setPercent(_ percent: Double) {
         guard percent.isFinite else { return }
         let bounded = max(minimumPercent, min(100, percent.rounded()))
         guard !stale else { error = "Waiting for a fresh sensor reading."; changed?(); return }
-        guard helperReady, competingApp == nil, helper != nil else { pendingPercent = bounded; error = nil; changed?(); return }
+        guard helperReady, competingApp == nil, helper != nil else {
+            // Kept as a preview until setup; it still ends Smart now.
+            _ = control.stopSmart(.manual, owns: false); persistSmart()
+            pendingPercent = bounded; error = nil; changed?(); return
+        }
         error = nil
-        submit(.set(bounded))
+        let ticket = control.userSet(bounded)
+        persistSmart()
+        if let ticket { send(ticket) } else { changed?() }
     }
-    /// Returns the fan to firmware control. Always accepted: while another
-    /// command is in flight it is queued and runs next.
+    /// The user chose Auto: ends Smart and returns the fan to firmware control.
+    func chooseAutomatic() {
+        requestAutomatic(completion: nil) { owns in self.control.userAutomatic(owns: owns) }
+    }
+    /// Returns the fan to firmware control (sleep, quit, Return to Auto, a
+    /// manual sensor failure). Always accepted: while another command is in
+    /// flight it is queued and runs next. Smart's setting is unchanged.
     func restore(completion: (() -> Void)? = nil) {
+        requestAutomatic(completion: completion) { owns in self.control.systemRestore(owns: owns) }
+    }
+    private func requestAutomatic(completion: (() -> Void)?, _ make: (Bool) -> FanCommandCoordinator.Ticket?) {
         pendingPercent = nil
         if let completion { restoreWaiters.append(completion) }
         guard helperReady, helper != nil else {
+            // Nothing can be sent; never leave a ticket waiting on no helper.
+            if make(false) != nil { control.resetConnection() }
+            persistSmart()
             ownsControl = false; returnTimer.cancel(); stopHeartbeat()
             finishRestoreWaiters(); changed?(); return
         }
         // A set in flight may be about to take control, so Auto still has
         // to follow it. Otherwise there is nothing of ours to restore.
-        guard ownsControl || requests.isBusy else { finishRestoreWaiters(); changed?(); return }
-        submit(.automatic)
+        let ticket = make(ownsControl)
+        persistSmart()
+        if let ticket { send(ticket) } else if !control.isBusy { finishRestoreWaiters(); changed?() } else { changed?() }
     }
 
-    private func submit(_ command: ControlRequestQueue.Command) {
-        if let now = requests.submit(command) { send(now) } else { changed?() }
+    // MARK: Smart cooling
+
+    private static let smartKey = "smartCooling", smartStopKey = "smartCoolingStopReason", smartTargetKey = "smartTargetCelsius"
+    /// The main selector's Smart choice.
+    func chooseSmart() { setSmartCooling(true) }
+    /// A new target (validated and persisted). It never turns Smart on; while
+    /// Smart runs, the next reading applies it.
+    func setSmartTarget(_ celsius: Double) {
+        let value = SmartTarget.clamp(celsius)
+        guard value != control.smartTarget else { return }
+        control.setSmartTarget(value)
+        UserDefaults.standard.set(value, forKey: Self.smartTargetKey)
+        changed?()
     }
-    private func send(_ command: ControlRequestQueue.Command) {
-        guard let helper else { _ = requests.reset(); finishRestoreWaiters(); changed?(); return }
+    /// The user took hold of the slider or its keys: Manual at once, with no
+    /// command until the user's speed is committed, so Smart never fights it.
+    func beginManualAdjustment() {
+        guard control.smartEnabled else { return }
+        control.userBeganAdjusting()
+        persistSmart(); schedulePoll(); changed?()
+    }
+    /// Turns Smart on (the main selector) or off. Off returns to firmware Auto.
+    func setSmartCooling(_ on: Bool) {
+        guard on != control.smartEnabled else { return }
+        guard on else { stopSmart(.user); return }
+        // Start from what the fan is doing now: the speed in flight or owned,
+        // else the measured speed under firmware control.
+        let owned = ownsControl && !control.isBusy && sample?.automatic == false
+        let seed = control.pendingPercent ?? (owned ? sample?.targetPercent : nil) ?? (sample == nil ? nil : actualPercent)
+        control.enableSmart(seed: seed, applied: owned && sample?.targetPercent != nil)
+        clearSmartSample()
+        pendingPercent = nil
+        // The Return to Auto timer is for manual speeds only.
+        returnTimer.cancel()
+        persistSmart(); schedulePoll(); changed?()
+    }
+    private func stopSmart(_ reason: SmartStopReason) {
+        guard control.smartEnabled else { return }
+        clearSmartSample()
+        let ticket = control.stopSmart(reason, owns: ownsControl)
+        persistSmart()
+        if let ticket { send(ticket) }
+        schedulePoll(); changed?()
+    }
+    private func persistSmart() {
+        let defaults = UserDefaults.standard
+        defaults.set(control.smartEnabled, forKey: Self.smartKey)
+        if let reason = control.notice?.reason { defaults.set(reason.rawValue, forKey: Self.smartStopKey) }
+        else { defaults.removeObject(forKey: Self.smartStopKey) }
+    }
+    /// One Smart evaluation per fresh sample. It commands only through the
+    /// serial queue, never while any command is in flight, and only with a
+    /// ready helper and a fresh reading begun under the current generation.
+    private func runSmart(_ reading: SmartCoolingReading, generation: UInt64) {
+        guard control.smartActive else { return }
+        let evaluations = control.smart.evaluations
+        defer { recordSmartSample(after: evaluations) }
+        if competingApp != nil { stopSmart(.competingController); return }
+        let ready = helperReady && helper != nil && !settingUp && !stale
+        let current = ownsControl ? (sample?.targetPercent ?? actualPercent) : actualPercent
+        guard let ticket = control.sample(reading, generation: generation, at: ProcessInfo.processInfo.systemUptime,
+                                          floor: minimumPercent, ready: ready, current: current) else { return }
+        send(ticket)
+    }
+    /// Keeps what Smart measured, only when this sample was evaluated (a read
+    /// from an older generation is not), with its own history.
+    private func recordSmartSample(after evaluations: UInt64) {
+        guard control.smart.evaluations != evaluations, let step = control.smart.lastStep else { return }
+        smartSample = SmartSample(celsius: step.celsius, source: step.source, at: Date())
+        if let celsius = step.celsius {
+            smartHistory.append(celsius); if smartHistory.count > 60 { smartHistory.removeFirst(smartHistory.count - 60) }
+        } else { smartHistory.removeAll() }
+    }
+    private func clearSmartSample() { smartSample = nil; smartHistory.removeAll() }
+    /// Asleep, firmware owns the fan. Smart stays on, suspended, and resumes
+    /// from the first reading begun after wake. Auto follows anything in
+    /// flight, which may be about to take the fan.
+    private func willSleep() {
+        timer?.cancel(); timer = nil
+        clearSmartSample()
+        requestAutomatic(completion: nil) { owns in self.control.sleep(owns: owns) }
+    }
+
+    private func send(_ ticket: FanCommandCoordinator.Ticket) {
+        guard let helper else { control.resetConnection(); finishRestoreWaiters(); changed?(); return }
         controlGeneration &+= 1
         let operation = controlGeneration, connection = connectionGeneration
         changed?()
         let completion: (Result<FanSnapshot, Error>) -> Void = { [weak self] result in DispatchQueue.main.async {
             guard let self, self.connectionGeneration == connection, self.controlGeneration == operation else { return }
-            self.complete(command, result)
+            self.complete(ticket, result)
         } }
-        switch command {
+        switch ticket.command {
         case .set(let value): helper.set(percent: value, completion)
         case .automatic: helper.automatic(completion)
         }
     }
-    private func complete(_ command: ControlRequestQueue.Command, _ result: Result<FanSnapshot, Error>) {
+    private func complete(_ ticket: FanCommandCoordinator.Ticket, _ result: Result<FanSnapshot, Error>) {
         controlGeneration &+= 1
-        switch (command, result) {
+        let outcome: FanCommandCoordinator.Outcome
+        switch result {
+        case .success(let snapshot): outcome = .applied(automatic: snapshot.automatic)
+        case .failure(let failure):
+            if case .notOwner? = HelperClient.classify(failure) { outcome = .notOwner } else { outcome = .failed(failure.localizedDescription) }
+        }
+        // Identity, not value: a reply for anything but the command in flight
+        // (e.g. from before a reset) changes nothing.
+        let smartBefore = control.smartEnabled
+        guard let done = control.complete(id: ticket.id, outcome: outcome) else { changed?(); return }
+        // Smart's own failed write ends it (see FanCommandCoordinator).
+        if smartBefore != control.smartEnabled { schedulePoll() }
+        switch (ticket.command, result) {
         case (.set, .success(let snapshot)):
             pendingPercent = nil; sample = snapshot; error = nil
             ownsControl = !snapshot.automatic
-            if ownsControl { returnTimer.start(now: .now) } else { returnTimer.cancel() }
+            // Return to Auto applies to a user's manual speed only; Smart's
+            // writes, and replies that arrive after Smart took over, never
+            // start or renew it.
+            if ownsControl && done.startReturnTimer { returnTimer.start(now: .now) } else { returnTimer.cancel() }
             startHeartbeat()
         case (.set, .failure(let failure)):
             // The helper rolls back failed writes itself and says whether Auto
@@ -248,7 +409,8 @@ final class AppModel {
                 error = "Could not restore automatic control: \(failure.localizedDescription)"
             }
         }
-        if let next = requests.finish() { send(next) } else { finishRestoreWaiters() }
+        persistSmart()
+        if let next = done.next { send(next) } else { finishRestoreWaiters() }
         changed?()
     }
     private func finishRestoreWaiters() {
@@ -261,7 +423,7 @@ final class AppModel {
         heartbeat = Timer(timeInterval: FanSafety.heartbeatInterval, repeats: true) { [weak self] _ in
             // A command in flight renews the helper lease itself; a heartbeat
             // would only queue behind it on the helper's serial queue.
-            guard let self, !self.requests.isBusy else { return }
+            guard let self, !self.control.isBusy else { return }
             self.helper?.heartbeat { error in
                 guard let error else { return }
                 DispatchQueue.main.async {
@@ -272,6 +434,7 @@ final class AppModel {
                     guard case .notOwner? = HelperClient.classify(error) else { return }
                     self.ownsControl = false; self.returnTimer.cancel(); self.stopHeartbeat()
                     self.error = "The helper ended manual control and is returning the fan to Auto."
+                    self.stopSmart(.controlLost)
                     self.changed?()
                 }
             }
@@ -284,7 +447,7 @@ final class AppModel {
     }
     private func stopHeartbeat() { heartbeat?.invalidate(); heartbeat = nil }
     private func configureReturnTimer(enabled: Bool, minutes: Double) {
-        returnTimer.configure(enabled: enabled, minutes: minutes, manual: ownsControl, now: .now)
+        returnTimer.configure(enabled: enabled, minutes: minutes, manual: ownsControl && !control.smartEnabled, now: .now)
         UserDefaults.standard.set(returnTimer.enabled, forKey: "autoReturnEnabled")
         UserDefaults.standard.set(returnTimer.minutes, forKey: "autoReturnMinutes")
         changed?()

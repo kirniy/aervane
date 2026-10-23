@@ -13,12 +13,13 @@ import QuartzCore
 /// the style is presentation-only: it settles transients, keeps the value,
 /// enabled/stale and focus state, and never previews or commits.
 ///
-/// The value tracks the pointer and keys immediately; every effect is a
-/// finite Core Animation reaction to an event, layered on top. Pointer
+/// The value tracks the pointer and keys immediately. Transient effects are
+/// finite Core Animation reactions; miniature rotors follow measured speed
+/// only while visible. Pointer
 /// tracking uses plain mouseDown/mouseDragged/mouseUp, so the run loop keeps
 /// delivering model updates mid-drag. Artwork is cached per size, scale,
-/// appearance, floor and style; nothing animates while idle, and hiding
-/// settles every transient.
+/// appearance, floor and style. Hiding freezes the rotors and settles every
+/// transient.
 final class PercentSlider: NSControl {
     var percent: Double {
         get { value }
@@ -33,12 +34,32 @@ final class PercentSlider: NSControl {
     }
     /// Values that give a haptic tick while dragging (e.g. preset speeds).
     var detents: [Double] = []
-    var isUnavailable = false { didSet { alphaValue = isUnavailable ? 0.45 : 1 } }
+    var isUnavailable = false { didSet { alphaValue = isUnavailable ? 0.45 : 1; if isUnavailable != oldValue { updateAmbient() } } }
     /// Measured fan speed as a percentage of maximum. Shown as a ghost mark
     /// on the track when it differs from the requested value.
     var measuredPercent: Double? { didSet { if measuredPercent != oldValue { placeMeasured(animated: true); updateAccessibility() } } }
+    /// The fan's actual speed from the hardware (RPM), nil when unknown or
+    /// stale. Drives only the Channel's miniature rotors (`RotorMotion`); it
+    /// never affects the value, commits or fan policy.
+    var measuredRPM: Double? { didSet { if measuredRPM != oldValue { updateAmbient() } } }
     /// Decoration ceiling (user level, lowered by system accessibility).
-    var effects = Theme.effects { didSet { if effects != oldValue { skin.decorate(animated: false, userAction: false) } } }
+    var effects = Theme.effects { didSet { if effects != oldValue { skin.decorate(animated: false, userAction: false); updateAmbient() } } }
+    /// The slider is on screen (panel shown, Settings closed). Continuous
+    /// motion (rotors, full-cooling flow) runs only then; the owner sets it
+    /// on show and clears it on hide.
+    var ambientActive = false { didSet { if ambientActive != oldValue { updateAmbient() } } }
+    /// Rotor rate now (revolutions per second), 0 when frozen (tests).
+    var rotorRate: Double { skin.rotors?.rate ?? 0 }
+    var isRotorSpinning: Bool { skin.rotors?.isSpinning ?? false }
+    /// Repeating rotor animations attached (tests: bounded, none when hidden).
+    var rotorAnimationCount: Int { skin.rotors?.animationCount ?? 0 }
+    /// The full-cooling flow is running, and its repeating loops (tests).
+    var isIceFlowing: Bool { skin.flow?.isRunning ?? false }
+    var flowAnimationCount: Int { skin.flow?.animationCount ?? 0 }
+    /// Read-only motion probes (tests and diagnostics): what is on screen
+    /// now, sampled over time to prove movement rather than attachment.
+    var rotorShownAngle: Double? { skin.rotors?.shownAngle }
+    var flowProbes: [LoopSet.Probe] { skin.flow?.probes ?? [] }
     /// How the control is drawn. Presentation only (see the type comment).
     var style: SliderStyle = .channel {
         didSet {
@@ -50,10 +71,17 @@ final class PercentSlider: NSControl {
             if layer != nil { updateLayer() }
             // Carry the hover/held shape over without playing anything.
             skin.shapeThumb(.settle); skin.settle()
+            updateAmbient()
             noteFocusRingMaskChanged()
         }
     }
     var preview: ((Double) -> Void)?
+    /// The user took hold of the control (pointer down, first key or
+    /// VoiceOver change). The owner selects Manual at once.
+    var began: (() -> Void)?
+    /// Travel time for a value set from outside the control (Smart changing
+    /// the fan): long enough to see, eased, and interrupted by the next value.
+    static let externalGlide: CFTimeInterval = 0.85
     var commit: ((Double) -> Void)?
     private(set) var dragging = false
     private(set) var hovered = false
@@ -107,6 +135,7 @@ final class PercentSlider: NSControl {
         didSet {
             guard isEnabled != oldValue else { return }
             if !isEnabled && dragging { cancelDrag() }
+            updateAmbient()
         }
     }
 
@@ -137,6 +166,17 @@ final class PercentSlider: NSControl {
         skin.place(animated: false, userAction: false)
         skin.decorate(animated: false, userAction: false)
         placeMeasured(animated: false)
+        updateAmbient()
+    }
+    /// Continuous motion. The rotors follow the actual fan RPM while the
+    /// slider is shown (`RotorMotion`); the full-cooling flow runs while the
+    /// formed ice is shown (`IceFlow`). Otherwise both stand still where they
+    /// are. Idempotent and cheap: called on every relevant change.
+    private func updateAmbient() {
+        let visible = ambientActive && window != nil
+        let spins = RotorMotion.spins(visible: visible, enabled: isEnabled, available: !isUnavailable, rpm: measuredRPM, effects: effects)
+        skin.spinRotors(at: spins ? RotorMotion.revolutionsPerSecond(rpm: measuredRPM) : 0)
+        skin.setFlow(IceFlow.runs(visible: visible, enabled: isEnabled, available: !isUnavailable, frozen: skin.isIceFormed, effects: effects))
     }
 
     /// Horizontal position of a value inside a slider of the given width and
@@ -178,15 +218,21 @@ final class PercentSlider: NSControl {
 
     /// Sets the value. `celebrate` marks user-initiated changes; model
     /// refreshes never form the ice sheet, glint or wake. Keyboard callers
-    /// pass `animated: false` so keys are always instant.
-    func setPercent(_ newValue: Double, animated: Bool, celebrate: Bool = false) {
+    /// pass `animated: false` so keys are always instant. `glide` lengthens
+    /// the travel for a value set from outside (Smart); each new value
+    /// retargets from what is on screen, so rapid updates never pile up.
+    /// Ignored while the user is dragging, and with Reduce Motion.
+    func setPercent(_ newValue: Double, animated: Bool, celebrate: Bool = false, glide: CFTimeInterval? = nil) {
         let previous = value
         value = clamp(newValue)
         if value != previous { skin.interrupt() }
         updateAccessibility()
+        if let glide, !dragging { skin.glideDuration = glide }
+        defer { skin.glideDuration = SliderSkin.glide }
         skin.place(animated: animated, userAction: celebrate)
         skin.decorate(animated: animated, userAction: celebrate)
         placeMeasured(animated: false)
+        updateAmbient()
         if celebrate && previous < 100 && value >= 100 { self.celebrate(animated: animated || dragging, delay: animated ? SliderSkin.glide * 0.5 : 0) }
     }
 
@@ -227,6 +273,7 @@ final class PercentSlider: NSControl {
     func prepareForHiding() {
         cancelDrag(); flushKeyCommit()
         hovered = false; keyboardFocus = false; updateThumbShape()
+        ambientActive = false
         settleTransients()
     }
     private func settleTransients() {
@@ -234,6 +281,8 @@ final class PercentSlider: NSControl {
         velocity = 0
     }
     /// Running transient animations across the control (lifecycle tests).
+    /// The repeating rotor spin and full-cooling flow are counted separately
+    /// (`rotorAnimationCount`, `flowAnimationCount`).
     var transientAnimationCount: Int { skin.allLayers.reduce(0) { $0 + ($1.animationKeys()?.count ?? 0) } }
 
     override func mouseDown(with event: NSEvent) {
@@ -242,6 +291,7 @@ final class PercentSlider: NSControl {
         if keyboardFocus { keyboardFocus = false; noteFocusRingMaskChanged() }
         window?.makeFirstResponder(self)
         skin.interrupt()
+        began?()
         let point = convert(event.locationInWindow, from: nil), thumbX = x(for: value)
         dragStart = value; dragging = true; velocity = 0
         // Grabbing the thumb keeps its offset; clicking the track glides there.
@@ -276,7 +326,7 @@ final class PercentSlider: NSControl {
         setPercent(dragStart, animated: true); preview?(dragStart); updateThumbShape()
     }
     override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow == nil { if dragging { endDrag(commit: true) }; flushKeyCommit(); settleTransients() }
+        if newWindow == nil { if dragging { endDrag(commit: true) }; flushKeyCommit(); ambientActive = false; settleTransients() }
         super.viewWillMove(toWindow: newWindow)
     }
 
@@ -304,6 +354,7 @@ final class PercentSlider: NSControl {
     /// key does not queue a helper write per repeat.
     private func nudge(to target: Double) {
         guard isEnabled, !dragging else { return }
+        if !keyCommitPending { began?() }
         userChange(to: target, animated: false)
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(fireKeyCommit), object: nil)
         keyCommitPending = true

@@ -24,17 +24,18 @@ Fan control is physically verified on the **M4 Mac mini (Mac16,10)**. Other mode
 <p align="center">
   <img src="docs/assets/menu-bar-preview.png" alt="Aervane running on macOS: temperature, manual 100% cooling, an icy slider, and inline presets" width="344">
 </p>
-<p align="center"><sub>Actual installed app at 100% cooling.</sub></p>
+<p align="center"><sub>Aervane 0.3.0 at 100% cooling. Dark appearance; Reduce Transparency enabled.</sub></p>
 
-- A compact glass panel, heat-colored readings, and your choice of Cooling Channel or Dot Grid sliders. Cooling effects grow with speed and freeze into ice at maximum.
-- Adjustable menu-bar content, spacing, slider style and effects. Animation responds to interaction; nothing loops while idle.
-- Editable presets, temperature-history inspection, and keyboard controls.
+- A compact glass panel, heat-colored readings, Dot Grid by default, and an optional Cooling Channel. Cooling effects grow with speed.
+- Adjustable menu-bar content, spacing, slider style and effects. Channel’s miniature fans follow measured RPM; Dot Grid keeps its continuous dot pattern. Motion stops when the panel closes.
+- Editable presets, temperature-history inspection, and keyboard controls. Temperature changes use a short crossfade with stable-width digits.
+- Auto · Smart · Manual. [Smart cooling](docs/smart-cooling.md) works toward a temperature you choose: it anticipates rising heat and adjusts cooling around the target, easing as temperatures fall through a small deadband. It can't guarantee a cap under every load.
 - Manual control without a time limit by default. An optional 5–120 minute timer lives in Settings.
 
 <details>
-<summary>Original Dot Grid style</summary>
+<summary>Dot Grid · live motion</summary>
 <p align="center">
-  <img src="docs/assets/dot-grid-preview.png" alt="The original Dot Grid slider at 100%, selectable in Settings" width="344">
+  <img src="docs/assets/dot-grid-motion.gif" alt="Actual Aervane 0.3.0 capture: Dot Grid forming ice and flowing at maximum cooling" width="344">
 </p>
 </details>
 
@@ -47,7 +48,7 @@ Fan control is physically verified on the **M4 Mac mini (Mac16,10)**. Other mode
 
 ### Build locally
 
-Requires a Mac and **Xcode 26.2 or newer** to compile the native glass interface. The resulting app targets macOS 14+, with a vibrancy fallback on versions before 26. Sensor compatibility is currently verified only on the M4 Mac mini.
+Requires a Mac and **Xcode 26.2 or newer**. The app targets macOS 14+ and uses one native frosted AppKit material for the panel and its pointer. Sensor compatibility is currently verified only on the M4 Mac mini.
 
 ```sh
 git clone https://github.com/kirniy/aervane.git

@@ -1,73 +1,49 @@
 # Aervane — development handoff
 
-Updated 2026-10-23. Repository: https://github.com/kirniy/aervane. The current implementation is on `main`; `fix/fan-control` retains the same repair and redesign history.
+Updated 2026-10-23. Public repository: https://github.com/kirniy/aervane. Native Swift/AppKit menu-bar app, with a small C AppleSMC bridge and no third-party runtime dependencies.
 
-## Current user priorities
+## Current work
 
-A tiny, exceptionally polished native macOS menu-bar temperature/fan utility. CPU is the original default; preserve the user's saved sensor selection. Percentage slider, editable presets, inline settings, no speed dialog. Use native Liquid Glass, precise microanimations, and minimal copy. The user explicitly requests real collaboration through `claude-vps`.
+Public Homebrew release is **0.2.0**. The integrated **0.3.0 Smart regulation and sensor-display correction passed 230 Mac tests**, was signed and installed, and exercised real fan changes. The user confirmed physical slider dragging and immediate Smart → Manual takeover. Two intermediate drafts passed notarization, but neither should be published: a further slider redesign is underway.
 
-Latest instructions:
+The reported 68°C beside “Above 73° · max cooling” had two causes. Smart used the hottest core while the panel showed averages; Smart now displays its actual controlling measurement, while the menu bar retains the selected source. The former target−3 full-speed curve was also too aggressive. The corrected working-target curve is 70% at the target and 100% at target+5°C, with a 1.5°C thermal deadband and bounded rising-trend anticipation. No artificial cooling-down timer or command-count ramp. At target86°C on the Mac, hottest CPU83.6–86.4°C produced confirmed targets80→76→71% as the load settled.
+
+The latest request explicitly replaces the requirement to preserve the original Dot Grid artwork: **make Dot Grid taller, redesign both styles' effects, fully frost Channel at maximum, and add miniature rotating fan patterns whose speed follows cooling speed**. Actual Claude (`claude-vps`, session `5607838c-35a8-4f9d-9d16-b0e88e4fabf9`) is implementing this from a fresh integrated snapshot in **`/workspace/aervane-slider-redesign-20261023`**, base **`d7c16ddc2b4de3be80957e76c5be6e2490dca4df`**. The controller/helper/SMC paths are outside its scope.
+
+Claude owns slider skins/support, necessary slider layout, related tests, DESIGN.md and its sidecar. The parent owns the remaining docs, Mac verification, signing and release. No signing credentials are on Claude's host. Never reapply an earlier full patch or publish a superseded distribution directory.
+
+## Persistent product requirements
+
+A tiny, exceptionally polished macOS menu-bar utility. Temperature at a glance, percentage fan control, editable presets, inline settings, no speed dialog. CPU is the original default; preserve saved sensor preferences. Use event-driven microanimations, readable native materials and minimal copy. The user specifically asks for actual Claude collaboration.
 
 > Cut taglines, helper text and secondary labels. If a screen needs them to make sense, fix the layout.
 
 > Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.
 
-**High temperature must not block manual fan control.** The earlier 95°C restriction was an Aervane policy mistake, not an AppleSMC limit. It has been removed from both command acceptance and watchdog restoration. Never reintroduce a temperature-only override. Invalid/stale telemetry, lost clients, expired leases, hardware bounds and failed write rollback still matter.
+**High temperature must not block manual fan control.** The former 95°C restriction was an Aervane policy mistake, not an AppleSMC limit. It was removed from command acceptance and watchdog restoration. Do not reintroduce it. Hardware bounds, stale/invalid telemetry, lost clients, failed-write rollback and recovery remain applicable.
 
-## Latest settings and motion brief
+Manual control has no expiry by default. Return to Auto is opt-in, with a 5–120 minute settings slider. It is separate from the helper connection watchdog and applies only to manual speeds. The user’s requested final state after all work is **Manual 76%, Smart OFF, Return to Auto OFF**. The user actively exercises the app during development; recheck the final state rather than relying on an earlier sample.
 
-Manual mode must persist by default. The user rejected the unrequested fixed 30-minute timeout, then asked for an **optional Return to Auto toggle and a time slider in settings**. `AppModel.autoReturnEnabled` defaults false; `autoReturnMinutes` is 5–120, in five-minute steps. `ManualReturnTimer` has deterministic tests for no expiry by default, opt-in start, duration edits, cancellation and invalid persisted values. It is independent of the helper connection watchdog.
+Slider style is independent of effects: **Channel** or **Dot Grid**. The latest request authorizes redesigning both. Effects are Off/Subtle/Expressive, with system Reduce Motion/Transparency respected. The requested miniature fan pattern may rotate while the panel is visible using bounded compositor animations; stop it when hidden or motion/effects are disabled. No per-frame application loop, display link, network polling, telemetry or embedded browser. Actual heat and cooling power use distinct colors.
 
-The UI now has progressive slider effects and ice forming at maximum cooling, temperature-specific states and microanimations, configurable compact menu-bar spacing/content/effects, and a GitHub icon on Source code. Actual heat and cooling power use separate color scales. Effects stay event-driven with no idle loops and respect accessibility preferences in code. Claude's patch from `/workspace/aervane-ui-20261023` is integrated, corrected, compiled, signed and installed. Current screenshots in `docs/assets` are actual macOS captures.
+## Hardware and control evidence
 
-## What is now verified
+Development Mac: M4 Mac mini, `Mac16,10`, one fan, maximum 4900 RPM and minimum 1000 RPM (21% after rounding). Zero is not supported on this machine; never relabel the hardware floor as 0%.
 
-- 153 tests pass on the actual Mac with Xcode 26.2. Production app/helper now build with a Developer ID Application identity and secure timestamps, and pass strict code-signature verification.
-- The signed development archive also passes strict signature verification after extraction. CI builds an ad hoc archive for verification but no longer uploads test-build artifacts, following the user’s cleanup request.
-- Installed signed helper approval and authenticated XPC work.
-- Real 100% → Auto test: independent SMC read saw `F0Md=1`, `F0Tg=4900`; fan reached about 4900 RPM. Auto then read `F0Md=0`; firmware subsequently returned to about 1000 RPM. Initial hottest CPU sample was 98.8°C.
-- Actual UI Boost and Auto actions succeeded. After removing the temperature policy, UI Balanced 60% also succeeded: independent target 2940 RPM, actual 2941 RPM, manual mode. Hottest sample in that separate physical test was 92.1°C. Tests additionally cover 60% retention at 100°C and 129°C; do not describe these simulated temperatures as physical measurements.
-- The root cause of the target verification error was write ordering. REA/Hopper shows the established controller switching modes before writing RPM. Aervane now does the same, with passive readback and rollback.
-- Missing XPC signing metadata was separately fixed by requesting `kSecCSSigningInformation`. Both app and helper still verify code-signing requirements.
-- The command queue preserves the latest user intent, including Auto during an in-flight write. Reconnection and quit use bounded callbacks and ownership-aware recovery.
-- The crash journal captures the raw pre-write target even in Auto, covering a crash between mode and target writes. This attribution is not an atomic hardware lock against other controllers.
-- The installed redesign applies 100% and 60% through its native controls. The five-minute opt-in timer kept 86% manual control at 285.7 seconds and had restored Auto at 300.8 seconds, verified by an independent SMC probe. The timer was then disabled and the user's 86% restored.
-- Menu-bar content/spacing, all effects levels, heat color and Celsius/Fahrenheit were exercised. Selected presentation settings persisted across restart. The settings panel and three-digit Fahrenheit figure fit the compact layout.
-- Missing GPU display data now shows an error without losing manual control: independent readback stayed at 60%, target 2940, actual 2941 RPM. Returning to the available sensor clears the error.
-- Parent review corrected ice formation during a continuous drag to 100%, interrupted animations, settings-page error visibility, and Auto/Manual accessibility values. Heartbeats run in the common run-loop modes, including native control tracking.
-- Short resource samples with the helper running measured about 34 MiB physical footprint for the closed app and 0.33% of one CPU core. Helper RSS was 8.6 MiB; its physical footprint was unavailable without additional privilege. See `docs/performance.md` for methods and limits.
+- Authenticated signed helper and XPC are working. Real 100% and 60% writes, Auto restoration, optional five-minute expiry and manual control at high temperature have been independently read back. See [verification](docs/verification.md).
+- At the first 0.3.0 installed checkpoint, Manual 76% read mode 1, target 3724 and actual 3722 RPM. Boost from Smart disabled Smart and read target 4900 / actual 4902. Auto from Smart read mode 0 / target 1000 / actual 1007. The old Smart controller also reduced from 100% toward lower speeds, but that policy is being replaced; do not claim validation of the forthcoming target controller from those samples.
+- The target-verification failure was write ordering: switch mode before writing RPM, then passive readback and rollback. REA/Hopper verified the established controller’s ordering.
+- Missing XPC signing metadata was fixed with `kSecCSSigningInformation`. Both sides still authenticate code-signing requirements.
+- The serial command reducer preserves user intent, ticket identity, Smart epochs and stale telemetry generations. Recovery journal captures the raw pre-write target, even in Auto. This attribution is not an atomic hardware lock against another controller.
+- High-temperature regression tests at 100°C and 129°C use simulated readings; do not describe them as additional physical tests.
 
-## Additional UI pass
+## Compatibility catalog
 
-Claude session `fc286b32-0b17-4836-89ac-39873fc37759` added inspectable temperature history, a draft-based preset editor, keyboard quick actions, native preset context menus and revised frost formation/melt. The patch compiles on this Mac with 134 passing tests. Signed version 0.2.0 is installed and actual manual control was independently verified. Live checks verified the temperature inspector, ⌘, settings shortcut, draft typing without fan shortcut interception, Escape cancellation, Return saving and the preset context menu. Claude session `5607838c-35a8-4f9d-9d16-b0e88e4fabf9` completed the expressive Cooling Channel and the user-requested style switch. Both are integrated. `PercentSlider` owns the shared input/commit path; `ChannelSkin` and `DotGridSkin` only render. Settings → Slider persists Channel or Dot Grid, independently of Effects. Parent fixed main-actor annotations in the extracted drawing helpers; 153 Mac tests pass. Real Channel→Dot Grid switching at 76% retained target 3724 RPM, and actual screenshots show both styles.
+[Embedded compatibility facts](docs/compatibility/mfc-1.5.21/README.md) cover 237 unique temperature identifiers, 414 sensor occurrences, 205 sensor/group rules, 46 model aliases, 14 fan-label entries and 15 initialized control constants from Macs Fan Control 1.5.21. Both architecture resource slices match; control predicates were checked against ARM64 instructions. No vendor executable, assets or decompiled source are committed.
 
-The parent added `PanelSurface.swift` to clip glass, aura and content to one continuous rounded silhouette, refreshed the native window shadow after show/resize, and reduced the menu-bar gap to two points. The Developer ID-signed update is installed; the window capture has clean clipped corners. The user separately confirmed that the outer rectangular outline is gone. Actual manual 74% was independently verified after replacement; the user explicitly requests **Manual 76% with Return to Auto off when all work is finished**.
+`Mac16,10` maps to `Macmini11,1`. Aervane reads its exact ten CPU keys. Catalog GPU keys `Tg04`/`Tg12` were absent in live reads here; GPU display reports unavailable rather than substituting unrelated temperatures. Other models retain candidate fallback. The catalog is not proof of universal fan control; this release currently supports one fan.
 
-## Sensor and key catalog
-
-See [the complete embedded compatibility catalog](docs/compatibility/mfc-1.5.21/README.md). It contains 237 unique SMC temperature identifiers, 414 sensor occurrences, 205 sensor/group rules, 46 model aliases, 14 fan-label entries and all 15 initialized SMC control constants. The sensor resources were verified identical in both architecture slices; control predicates were checked against ARM64 instructions. Scope limits are explicit.
-
-`Mac16,10` maps to `Macmini11,1`. Aervane now reads its exact ten CPU keys, including previously missing `Te0U` and `Te0V`. The catalog's GPU keys `Tg04` and `Tg12` were absent in the live probe on this machine; GPU selection reports unavailable rather than mislabeling unrelated sensors. The optional-GPU failure path was verified in the installed UI with manual control retained. Other models retain the previous candidate fallback; the catalog is not a claim that Aervane controls every model yet.
-
-## Architecture and file ownership
-
-| Area | Files |
-| --- | --- |
-| Menu bar, panel lifecycle | `Sources/Zephyr/{main,PanelSurface}.swift` |
-| Native UI | `Sources/Zephyr/{PanelView,PercentSlider,SliderSkin,ChannelSkin,DotGridSkin,Theme}.swift` |
-| Presentation preferences and pure visual rules | `Sources/Zephyr/PresentationPreferences.swift` |
-| Model/helper communication | `Sources/Zephyr/{AppModel,HelperClient,HelperInstaller}.swift` |
-| Hardware read/write | `Sources/SMC`, `Sources/SMCClient` |
-| Authenticated helper, recovery journal | `Sources/ZephyrHelper` |
-| Transactions, leases, command queue | `Sources/ZephyrCore` |
-
-Keep native runtime dependency-free. Hardware control currently requires one fan and the supported mode key. Never import vendor binaries, assets or decompiled code. Compatibility facts and independent code are in the repo.
-
-## Collaboration
-
-Actual Claude session `48ef955d-dd80-4094-b719-459f7e1f5917` through the user's `claude-vps` launcher implemented earlier UI/control repairs and the latest glass/ice redesign. Its latest workspace was `/workspace/aervane-ui-20261023`. Claude checked Foundation-only presentation logic on Linux; the parent integrated the patch, fixed review findings and ran the full macOS build, 113 tests and live UI/hardware checks. The integrated repository is authoritative: remote drafts do not include all subsequent local corrections. Start a fresh clone for further work.
-
-## Build and test
+## Build, diagnostics and distribution
 
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
@@ -75,20 +51,18 @@ swift test
 tools/build.sh
 ```
 
-Set `SIGN_IDENTITY` for an Apple-signed helper build. The installed app is `/Applications/Aervane.app`. Read-only diagnostics: `Aervane --probe`. Explicit hardware verification: `Aervane --verify-control` (100% briefly, then Auto; only run within user authorization). Close the competing controller for an isolated test.
+Set `SIGN_IDENTITY` to an Apple signing identity for hardware-control builds. Default ad hoc builds are for read-only interface work. Installed app: `/Applications/Aervane.app`. `Aervane --probe` is read-only. `--verify-control` changes the real fan (100% then Auto); use only within the user’s authorization. Normal quit restores Auto before helper replacement. `--unregister-helper` refuses to proceed while the fan is manual.
 
-## Open validation and distribution work
+Distribution is **Homebrew only**. npm was explicitly canceled. Use `tools/release.sh` with `SIGN_IDENTITY` and local Keychain profile `NOTARY_PROFILE=aervane-notary`. The script signs, submits to Apple, staples, rearchives and verifies the extracted signature. `tools/prepare-distribution.py --output dist/distribution-<version>` checks signatures, architecture, version, Gatekeeper and ticket before creating the versioned archive/checksum/cask. Never overwrite published version assets. No private keys go in Git or remote workspaces.
 
-The next version is `0.2.0`, held in `VERSION`; `tools/build.sh` uses it for the bundle version. Distribution is **Homebrew only**, following the user's latest instruction. The abandoned npm prototype remains in commit `446b10b` if ever needed; do not restart npm signup or publishing.
+0.2.0: https://github.com/kirniy/aervane/releases/tag/v0.2.0. Its accepted notarization, public Homebrew installation and cask online audit are recorded in [verification](docs/verification.md) and [distribution](docs/distribution.md). The tap is https://github.com/kirniy/homebrew-tap. CI verifies builds but no longer uploads disposable test-build artifacts. Preserve legitimate release assets.
 
-`tools/prepare-distribution.py` generates a versioned archive, metadata and cask only after checking Developer ID signatures, arm64 architecture, Gatekeeper and a stapled ticket. Final version 0.2.0 is signed and accepted by Apple (submission `f68f7cab-e535-4d76-b5e5-e0afe2307797`), stapled and verified after extraction. Archive SHA-256: `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`. The local `aervane-notary` Keychain profile holds the credentials; no private keys are in source control or on Claude's host. The user's original Developer ID/API creation approvals have already been fulfilled.
+This Mac’s existing Gatekeeper global configuration reports `override=security disabled`; it was not changed. Accepted notarization, signatures and stapled tickets are verified separately. Homebrew’s local online-audit preflight rejects Xcode 26.2 on macOS 27; the supported GitHub macOS 26 runner provides that check. Do not change global Xcode/security settings to work around it.
 
-**Published and installed:** https://github.com/kirniy/aervane/releases/tag/v0.2.0. The cask is live in `kirniy/homebrew-tap`, and a fresh `brew install --cask kirniy/tap/aervane` succeeded. The public download checksum matches, installed signatures/ticket validate, and the normal first-launch Open confirmation states that Apple checked the app. A newly registered helper applied 76% (target 3724, actual 3725 RPM). Dot Grid survived the replacement/relaunch; Channel was selected afterward. **Final requested state: Manual 76%, Return to Auto OFF.** Do not change it after verification. Preserve immutable release assets; corrections need a new version.
+## Validation still required
 
-Local cask style and the full online audit pass. The online audit ran successfully on GitHub's macOS runner: https://github.com/kirniy/homebrew-tap/actions/runs/39855983205. This Mac's Xcode 26.2 is rejected by Homebrew's build-environment preflight on macOS 27, so the supported runner provides that check. No Xcode or security settings were changed. See `docs/verification.md` for the existing Gatekeeper-global-configuration limitation.
-
-- Physical pointer drag, repeated actual status-item clicks, outside dismissal, rapid toggles and multiple monitors. Native handler regression tests and keyboard/accessibility paths pass; app-scoped CUA reports `AXError.notImplemented` for pointer drag/click on the custom slider. Do not claim a physical drag test.
-- Real VoiceOver, Reduce Motion/Transparency, light theme, 1× screens and long-content states.
-- Physical helper/app crash, sleep/wake and expired-lease scenarios beyond the controlled normal restoration tests.
-- More Mac models, multiple fans and Intel/alternate mode-key support.
-
+- Integrate Claude's new slider redesign, review it, run the complete Mac suite and signed build. Render both styles, full frost, measured-speed rotors, all effects settings and motion lifecycle; measure open/closed resource use.
+- Preserve the completed Smart fixes: actual controlled temperature, moderate cooling around the working target, rising/falling behavior, target persistence/units, immediate Manual/Auto override. See [Smart cooling](docs/smart-cooling.md) for the 230-test checkpoint and live trace.
+- Re-notarize the final redesign, publish 0.3.0, update the tap, verify CI and a public Brew update. Leave **Manual 76%, SmartOFF, ReturnToAutoOFF**. Preserve the latest saved target: the user is actively testing and has changed it several times; last observed86°C, not the earlier73/67 or temporary90°C test.
+- Physical slider drag is user-confirmed. Repeated status-item clicks/outside dismissal, real VoiceOver, system Reduce Motion/Transparency, 1× and multiple displays remain incompletely tested. Light appearance and three-digit Fahrenheit were rendered on the Mac at the regulation checkpoint.
+- Physical crash/sleep/wake/lease-expiry, additional Mac models and multiple fans need broader testing. Automated policy/recovery tests are not hardware validation.

@@ -11,7 +11,12 @@ enum ThumbGesture { case settle, grab, release }
 ///
 /// Skins read the control's state through the forwarding properties below
 /// and keep the event-driven rules: artwork is cached per geometry, every
-/// animation is finite, and `settle()` removes all of them.
+/// transient animation is finite, and `settle()` removes all of them. The
+/// deliberate exceptions are the Channel's miniature rotors (`rotors`),
+/// which turn with the real fan, and the full-cooling flow (`flow`): both
+/// repeat only while the panel is visible, and freeze in place whenever the
+/// control asks (hidden, Settings open, Effects Off, Reduce Motion,
+/// disabled or stale).
 @MainActor class SliderSkin {
     unowned let host: PercentSlider
     let style: SliderStyle
@@ -19,6 +24,12 @@ enum ThumbGesture { case settle, grab, release }
     var isIceFormed = false
     /// Scale of the cached artwork (0 until first rendered).
     var renderedScale: CGFloat = 0
+    /// Travel time for value placement. The control lengthens it while it
+    /// places a value set from outside (Smart), so every style — including
+    /// skins written before this existed — glides perceptibly.
+    var glideDuration: CFTimeInterval = SliderSkin.glide
+    /// The style's miniature rotors, if it has any (set by the subclass).
+    var rotors: RotorField?
 
     init(host: PercentSlider, style: SliderStyle) { self.host = host; self.style = style }
 
@@ -48,8 +59,20 @@ enum ThumbGesture { case settle, grab, release }
     /// A user action reached 100% (the control already played the haptic).
     func celebrate(animated: Bool, delay: CFTimeInterval) {}
 
-    func settle() { allLayers.forEach { $0.removeAllAnimations() } }
+    func settle() { rotors?.freeze(); setFlow(false); allLayers.forEach { $0.removeAllAnimations() } }
     func uninstall() { settle(); layers.forEach { $0.removeFromSuperlayer() } }
+    /// Spins the rotors at `rps` revolutions per second, or freezes them
+    /// in place (0). Called by the control whenever visibility, effects,
+    /// enablement, freshness or the measured fan speed change.
+    func spinRotors(at rps: Double) { if rps > 0 { rotors?.spin(at: rps) } else { rotors?.freeze() } }
+    /// The style's continuous full-cooling motion, if it has any.
+    var flow: LoopSet? { nil }
+    /// Runs (or freezes in place) the full-cooling flow. The control decides
+    /// when (`IceFlow.runs`); the skin only plays it at the effects' pace.
+    func setFlow(_ running: Bool) {
+        guard let flow else { return }
+        if running { flow.start(pace: IceFlow.pace(effects: effects)) } else { flow.freeze() }
+    }
 
     // MARK: Control state (read-only)
 
@@ -83,9 +106,13 @@ enum ThumbGesture { case settle, grab, release }
         let from = (surging ? layer : layer.presentation() ?? layer).value(forKeyPath: keyPath)
         apply()
         guard animated, let from else { layer.removeAnimation(forKey: keyPath); return }
+        // A placement glide takes the control's current glide time; a longer
+        // (external) glide eases in and out so the travel reads as motion.
+        let placement = duration == SliderSkin.glide && glideDuration != SliderSkin.glide
         let animation = CABasicAnimation(keyPath: keyPath)
         animation.fromValue = from; animation.toValue = layer.value(forKeyPath: keyPath)
-        animation.duration = duration; animation.timingFunction = timing
+        animation.duration = placement ? glideDuration : duration
+        animation.timingFunction = placement ? Theme.Ease.inOut : timing
         layer.add(animation, forKey: keyPath)
     }
 

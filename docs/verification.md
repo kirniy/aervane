@@ -1,8 +1,25 @@
+# Latest 0.3.0 verification checkpoint
+
+On 2026-10-23 the Mac suite passed 247 tests, including real-time presentation-layer movement at measured rotor rates, both maximum-cooling effects, redundant updates, reopening, and stopping under Reduce Motion. The initial freeze fixture sampled the preceding compositor frame; the corrected fixture commits the stop before taking its stationary baseline. These checks verify motion mechanics, not subjective visual quality.
+
+Installed UI inspection found system Reduce Motion enabled, correctly suppressing motion despite Expressive effects. It was disabled at the user's explicit request and independently read back as false; Reduce Transparency stayed enabled. Two subsequent live slider captures differ across the track. Current development media and screenshots must state the actual app version/settings; old 0.2 assets are not evidence for 0.3.
+
+Actual manual 100% readback: target 4900 RPM, measured 4898 RPM. Manual 76%: target 3724 RPM, measured 3724 RPM. Model support remains limited to the tested M4 Mac mini.
+
 # Verification record
 
 2026-10-23 · M4 Mac mini (Mac16,10), macOS 27.0, Xcode 26.2.
 
-## Confirmed on the development Mac
+## 0.3.0 regulation checkpoint (before the final slider redesign)
+
+- 230 tests passed on the Mac. The signed app and helper built successfully; strict installed signatures passed.
+- Smart at target86°C reduced confirmed targets80→76→71% over a 36-second, 13-sample read-only trace with hottest CPU83.6–86.4°C. The panel displayed CPU PEAK and the slider followed the changing command. See [Smart cooling](smart-cooling.md).
+- Auto from Smart restored mode0/target1000. A slider adjustment selected Manual and applied76%: mode1/target3724/actual3725 RPM.
+- Light appearance, both slider styles, target persistence, whole-degree Fahrenheit conversion, a three-digit temperature header and the expanded settings explanation were rendered on the installed app.
+- The user confirmed physical mouse dragging works and immediately leaves Smart. The automated native interface exercises Accessibility/keyboard paths, not that physical drag.
+- This checkpoint passed notarization, but its archive is superseded by the requested slider redesign and is not a public release. New rendering, performance, signing and distribution checks remain required for the final design.
+
+## 0.2.0 historical verification on the development Mac
 
 - 153 tests pass: sensor decoding and discovery, fan limits, write order/settling/rollback, leases, journals, client deadlines, command queuing, optional timer behavior, native slider handlers and presentation rules.
 - Production app and helper compile, Developer ID signing with secure timestamps succeeds, and `codesign --verify --deep --strict` passes. The final 0.2.0 archive is accepted by Apple, stapled, and passes ticket validation, Gatekeeper assessment and extracted signature verification.
@@ -35,8 +52,8 @@ The first launch showed macOS’s normal Internet-download confirmation, explici
 
 ## Remaining checks
 
-- Physical pointer dragging and repeated clicks on the actual menu-bar status item. CUA's app-scoped native interface returns `AXError.notImplemented` for pointer drag/click on the custom slider; handler tests do not substitute for physical pointer testing.
-- Real VoiceOver, Reduce Motion/Transparency, light appearance, 1× displays and multiple screens.
+- Repeated clicks on the actual menu-bar status item, and physical pointer verification of the forthcoming slider redesign. Dragging on the regulation checkpoint is user-confirmed; CUA handler tests do not substitute for that evidence.
+- Real VoiceOver, system Reduce Motion/Transparency, 1× displays and multiple screens. Light and dark appearance have been rendered at different checkpoints; final-design captures remain required.
 - Physical crash, sleep/wake, lease-expiry and fault-injection recovery beyond the normal verified Auto restoration. Automated recovery tests cover the corresponding policy and journal paths.
 - Additional Mac models, multiple fans and alternate mode-key implementations.
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-23T12:00:00+04:00",
+  "generatedAt": "2026-10-23T06:47:10.160951+00:00",
   "title": "Design System: Aervane",
   "extensions": {
     "colorMeta": {
@@ -101,21 +101,21 @@
       {
         "name": "glide",
         "value": "200ms cubic-bezier(0.23,1,0.32,1)",
-        "purpose": "Thumb, coolant, rime reveal and halo for pointer jumps, preset clicks and model changes. Keyboard (arrows, 1-6, M) is instant."
+        "purpose": "200 ms for pointer jumps and presets; Smart updates use an interruptible 850 ms glide. Manual keyboard input remains immediate."
       },
       {
         "name": "mode-pill",
         "value": "spring (stiffness 300, damping 24)",
-        "purpose": "Auto/Manual selection."
+        "purpose": "Auto / Smart / Manual selection; finite Smart activation sweep and bloom."
       },
       {
         "name": "ice-formation",
-        "value": "620ms freezing front from the thumb to 70%, rim crystals grow, glint rides it; glint returns and frosts the thumb with a needle burst (1.25s total)",
-        "purpose": "A user reaching 100% cooling freezes the top of the channel into a sheet (Expressive only)."
+        "value": "Smooth milky frosted ice (coverage as opacity, ≥ 85%) with a soft halo, no cracks or needles; the front crawls the whole track from the thumb in growth spurts (Channel 1.1 s, Dot Grid 1.0 s), a bar of light rides out and back, the thumb frosts over (1.8 s / 1.6 s in all).",
+        "purpose": "Any crossing into 100% the person can see (drag, click, preset, or Smart while the panel is open) freezes the whole track (Expressive only); keys, hidden refreshes and unchanged polling never replay it; Subtle fades it in."
       },
       {
         "name": "melt",
-        "value": "420ms ease-in-out from wherever the front is; plates fade, rim crystals retract",
+        "value": "Recede: Channel 700 ms, Dot Grid 600 ms ease-in-out; the front draws back toward the thumb end from what is on screen while the ice clears late.",
         "purpose": "Ice melts when cooling is lowered; an interrupted formation never snaps to full."
       },
       {
@@ -140,12 +140,12 @@
       },
       {
         "name": "ripple",
-        "value": "440ms ring along the channel (620ms wide on release)",
+        "value": "Channel: 440ms ring along the tube (620ms wide on release); Dot Grid: 420ms ring of glints through the dots (600ms wide)",
         "purpose": "Grab, release and preset detents (Expressive)."
       },
       {
         "name": "rime-melt",
-        "value": "500ms ease-in-out",
+        "value": "Channel 550 ms, Dot Grid 500 ms ease-in-out",
         "purpose": "Rime lowered by a drag melts back behind the thumb; the coolant never lags."
       },
       {
@@ -154,9 +154,14 @@
         "purpose": "Settings → Slider swaps Channel and Dot Grid skins without touching the value or the fan."
       },
       {
-        "name": "temperature-roll",
-        "value": "300ms push",
-        "purpose": "Temperature figure changes."
+        "name": "fan-rotors",
+        "value": "Channel only. Additive Core Animation rotation per rotor at RPM / 2000 rev/s from the hardware's measured RPM (1/33 of the real fan, capped at 4 rev/s, under the 36°/frame aliasing limit of a five-blade rotor), via a shared clock layer's speed (phase-continuous retiming); same scale at every effects level; Off and Reduce Motion still",
+        "purpose": "Shows the real fan spinning up and down; frozen in place when hidden, Settings open, disabled, stale, stopped or motion is not allowed. The Dot Grid has no fan graphics."
+      },
+      {
+        "name": "temperature-change",
+        "value": "200ms ease-in-out crossfade on tabular digits; newest reading set at once; one fade at a time",
+        "purpose": "A real change of the same reading; source, unit and stale transitions, hidden, Effects Off and Reduce Motion change without motion."
       },
       {
         "name": "aura",
@@ -197,6 +202,11 @@
         "name": "reduced-motion",
         "value": "instant",
         "purpose": "System Reduce Motion removes all movement; static state remains."
+      },
+      {
+        "name": "ice-flow",
+        "value": "At 100%, bounded repeating compositor loops: Channel cold currents (104 pt / 4 s) + fine streaks (60 pt / 1.25 s) + two out-of-phase glint sets (2.3 s, 3.1 s); Dot Grid light waves through the crystals (84 pt / 2.6 s) + two glint sets (2.1 s, 2.9 s). Subtle ×1.8 slower and fainter; Off and Reduce Motion still.",
+        "purpose": "Full cooling reads as living, flowing ice rather than static texture; runs only while shown, enabled and fresh, freezing in place otherwise."
       }
     ]
   },
@@ -204,7 +214,7 @@
     "northStar": "The Native Instrument",
     "overview": "Aervane is a compact native macOS menu-bar instrument. Temperature leads; direct percentage control follows. Layout and controls carry state with minimal copy. Point of view: warm light behind the glass, frost on it — heat glows behind the reading, measured airflow chills the lower edge, the cooling command runs as coolant light through a channel in the glass, grows rime and freezes into sheet ice at full cooling.",
     "keyCharacteristics": [
-      "Native AppKit glass",
+      "Native AppKit frosted material with one continuous rounded pointer",
       "Heat behind the glass, frost on it",
       "Ice for cooling, heat for temperature",
       "Event-driven Core Animation only",
@@ -248,9 +258,9 @@
     "donts": [
       "Do not add taglines, footers or section labels.",
       "Do not describe preview as applied.",
-      "Do not add idle animation, timers or particles.",
+      "Do not add idle animation, timers or particle systems. The only repeating motion is the Channel's rotors mirroring the fan's actual RPM and the ice flow at 100%, bounded compositor loops that run only while the slider is visible.",
       "Do not let a heat state imply that manual control is blocked.",
-      "Do not use literal snowflakes or falling snow; frost is grain, crystal and sheet ice on the slider channel."
+      "Do not use literal snowflakes or falling snow; frost is grain, crystal and sheet ice on the slider."
     ]
   }
 }
