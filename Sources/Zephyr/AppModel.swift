@@ -89,7 +89,9 @@ final class AppModel {
         set { configureReturnTimer(enabled: returnTimer.enabled, minutes: newValue) }
     }
     var competingApp: NSRunningApplication? { NSRunningApplication.runningApplications(withBundleIdentifier: "com.crystalidea.macsfancontrol").first }
-    var minimumPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return ceil(s.minimumRPM / s.maximumRPM * 100) }
+    /// The linked slider's floor: the lowest per-fan minimum, so every
+    /// position still moves at least one fan (others hold their own minimum).
+    var minimumPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return ceil(s.floorPercent) }
     var actualPercent: Double { guard let s = sample, s.maximumRPM > 0 else { return 0 }; return min(100, max(0, s.currentRPM / s.maximumRPM * 100)) }
     /// Speed the user most recently asked for that the helper has not confirmed.
     var requestedPercent: Double? { pendingPercent ?? control.pendingPercent }
@@ -97,6 +99,8 @@ final class AppModel {
     var temperatureText: String { panelReadout.text(fahrenheit: fahrenheit) }
     var temperatureUnit: String { fahrenheit ? "°F" : "°C" }
     var stale: Bool { sample.map { Date().timeIntervalSince($0.sampledAt) > 12 } ?? true }
+    /// Why the fans can be watched but not controlled on this Mac, if so.
+    var fanControlUnavailable: String? { sample?.control.flatMap { $0.isSupported ? nil : $0.message } }
     var loginEnabled: Bool { SMAppService.mainApp.status == .enabled }
 
     init(reader: TelemetryReader = .live(), defaults: UserDefaults = .standard, startsServices: Bool = true) {
@@ -183,7 +187,14 @@ final class AppModel {
             if let failure = reading.cpuError { error = "Sensor: \(failure)" }
             else if error == nil { error = "Sensor: GPU temperature is unavailable on this Mac." }
         }
-        guard let snapshot = reading.snapshot, let smartReading = reading.smartReading else {
+        if reading.fanless {
+            // A valid zero-fan inventory: temperature monitoring only. Smart
+            // has nothing to drive, so it stops silently, without a fault.
+            sample = nil
+            if control.smartEnabled { stopSmart(.user) }
+            return
+        }
+        guard let snapshot = reading.snapshot else {
             // Never let the last good fan reading enable writes after a failure.
             sample = nil
             if control.smartEnabled { if control.smartActive { stopSmart(.sensorFailed) } }
@@ -191,12 +202,19 @@ final class AppModel {
             return
         }
         sample = snapshot
+        if let blocked = fanControlUnavailable, control.smartEnabled {
+            stopSmart(.user); error = blocked
+        }
         if ownsControl && snapshot.automatic {
             ownsControl = false; returnTimer.cancel(); stopHeartbeat()
             stopSmart(.controlLost)
         } else if ownsControl && returnTimer.isDue(now: .now) { restore() }
         control.observe(automatic: snapshot.automatic && !ownsControl)
-        runSmart(smartReading, generation: smartGeneration)
+        if let smartReading = reading.smartReading {
+            runSmart(smartReading, generation: smartGeneration)
+        } else if control.smartEnabled {
+            stopSmart(.sensorFailed)
+        }
     }
     func enableControl() {
         guard !busy else { return }
@@ -255,6 +273,7 @@ final class AppModel {
         guard percent.isFinite else { return }
         let bounded = max(minimumPercent, min(100, percent.rounded()))
         guard !stale else { error = "Waiting for a fresh sensor reading."; changed?(); return }
+        if let blocked = fanControlUnavailable { error = blocked; changed?(); return }
         guard helperReady, competingApp == nil, helper != nil else {
             // Kept as a preview until setup; it still ends Smart now.
             _ = control.stopSmart(.manual, owns: false); persistSmart()
@@ -317,6 +336,7 @@ final class AppModel {
     func setSmartCooling(_ on: Bool) {
         guard on != control.smartEnabled else { return }
         guard on else { stopSmart(.user); return }
+        if let blocked = fanControlUnavailable { error = blocked; changed?(); return }
         // Start from what the fan is doing now: the speed in flight or owned,
         // else the measured speed under firmware control.
         let owned = ownsControl && !control.isBusy && sample?.automatic == false

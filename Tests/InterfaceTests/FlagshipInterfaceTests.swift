@@ -168,7 +168,7 @@ import XCTest
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let model = AppModel(defaults: defaults, startsServices: false)
-        let reader = TelemetryReader(cpu: { (68, 74) }, fan: { (2000, 1000, 4900, nil, true) }, gpu: { 60 })
+        let reader = TelemetryReader(cpu: { (68, 74) }, fan: { .single(current: 2000, minimum: 1000, maximum: 4900) }, gpu: { 60 })
         model.acceptTelemetry(reader.read(wantsGPU: false), sensor: "CPU")
         let flow = OnboardingFlow(store: OnboardingStore(defaults: defaults), helperRegistered: false)
         flow.handle(.chooseTemperatureOnly)

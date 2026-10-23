@@ -7,15 +7,20 @@ import ZephyrCore
 /// Exercises the installed signed XPC path, including a short maximum-cooling
 /// command and confirmed Auto restoration. Run only with permission to test.
 ///
-/// Every stage is cross-checked with an unprivileged AppleSMC read from this
-/// process, independent of the helper's own readback.
+/// Every stage is cross-checked with an unprivileged AppleSMC read of every
+/// fan from this process, independent of the helper's own readback.
 func verifyFanControl() -> Never {
     guard NSRunningApplication.runningApplications(withBundleIdentifier: "com.crystalidea.macsfancontrol").isEmpty else {
         fputs("Quit Macs Fan Control before running the control verification.\n", stderr); exit(1)
     }
-    let reader = SMCReader()
+    let fans = FanInventoryReader(smc: SMCBridge(), model: SMCBridge.model, platform: SMCBridge.platform)
     do {
-        guard try reader.readFan().automatic else {
+        let inventory = try fans.read()
+        guard !inventory.fans.isEmpty else { fputs("This Mac reports no fans.\n", stderr); exit(1) }
+        guard inventory.control.isSupported else {
+            fputs("\(inventory.control.message ?? "Fan control is unavailable on this Mac.")\n", stderr); exit(1)
+        }
+        guard inventory.fans.allSatisfy(\.automatic) else {
             fputs("Restore Auto before running the control verification.\n", stderr); exit(1)
         }
         guard try HelperInstaller().enable() == .enabled else {
@@ -25,8 +30,11 @@ func verifyFanControl() -> Never {
 
     let client = HelperClient()
     func registers() -> String {
-        guard let raw = try? reader.readFanRegisters() else { return "independent read failed" }
-        return "F0Md=\(raw.mode) F0Tg=\(Int(raw.targetRPM.rounded())) F0Ac=\(Int(raw.actualRPM.rounded())) F0Mx=\(Int(raw.maximumRPM.rounded()))"
+        do {
+            return try fans.read().fans.map { fan in
+                "F\(fan.index) \(fan.mode.rawValue) Tg=\(fan.targetRPM.map { String(Int($0.rounded())) } ?? "-") Ac=\(Int(fan.currentRPM.rounded())) Mx=\(Int(fan.maximumRPM.rounded()))"
+            }.joined(separator: ", ")
+        } catch { return "independent read failed: \(error.localizedDescription)" }
     }
     func report(_ stage: String, _ value: FanSnapshot) {
         let target = value.targetPercent.map { String(format: "%.2f%%", $0) } ?? "Auto"
@@ -55,9 +63,10 @@ func verifyFanControl() -> Never {
                 case .failure(let error): fail(error.localizedDescription)
                 case .success(let applied):
                     report("Applied", applied)
-                    guard let raw = try? reader.readFanRegisters(), raw.mode == 1,
-                          abs(raw.targetRPM - raw.maximumRPM) <= FanWriteTransaction.rpmTolerance else {
-                        fail("independent readback does not show manual maximum")
+                    guard let now = try? fans.read(), !now.fans.isEmpty, now.fans.allSatisfy({ fan in
+                        fan.mode == .manual && fan.targetRPM.map { abs($0 - fan.maximumRPM) <= FanWriteTransaction.rpmTolerance } == true
+                    }) else {
+                        fail("independent readback does not show every fan at manual maximum")
                     }
                     // Watch the fan respond while the lease is held. The
                     // helper renews on commands; send heartbeats meanwhile.
@@ -72,7 +81,7 @@ func verifyFanControl() -> Never {
                             switch result {
                             case .failure(let error): fail(error.localizedDescription)
                             case .success(let restored):
-                                guard restored.automatic, (try? reader.readFan().automatic) == true else {
+                                guard restored.automatic, (try? fans.read().fans.allSatisfy(\.automatic)) == true else {
                                     fail("Auto did not verify independently")
                                 }
                                 report("Restored", restored); client.invalidate(); exit(0)

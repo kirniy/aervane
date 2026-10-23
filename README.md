@@ -5,7 +5,7 @@
 <h1 align="center">Aervane</h1>
 <p align="center">
   <a href="https://github.com/kirniy/aervane/actions/workflows/ci.yml"><img src="https://github.com/kirniy/aervane/actions/workflows/ci.yml/badge.svg" alt="Build and tests"></a>
-  <img src="https://img.shields.io/badge/macOS-14%2B-black" alt="macOS 14 and later">
+  <img src="https://img.shields.io/badge/macOS-13%2B-black" alt="macOS 13 and later">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7bd5bb" alt="MIT license"></a>
 </p>
 
@@ -17,9 +17,9 @@ A native Mac menu-bar utility with CPU temperature at a glance, direct percentag
 brew install --cask kirniy/tap/aervane
 ```
 
-Apple Silicon · macOS 14+ · Developer ID signed and notarized. Open Aervane from Applications. The first launch opens a short introduction in the menu-bar panel. Choose temperature monitoring alone, or preview the fan controls and explicitly set up the signed helper. [First-run guide](docs/first-run.md).
+Intel & Apple Silicon · macOS 13+ · Developer ID signed and notarized. Open Aervane from Applications. The first launch opens a short introduction in the menu-bar panel. Choose temperature monitoring alone, or preview the fan controls and explicitly set up the signed helper. [First-run guide](docs/first-run.md).
 
-Fan control is physically verified on the **M4 Mac mini (Mac16,10)**. Other models remain unverified; this release supports one fan. High temperature alone does not block manual control.
+One universal app for Intel and Apple Silicon: model-aware temperatures, linked control of every detected fan, and temperature monitoring on fanless Macs. Each fan follows its own firmware limits. High temperature alone does not block manual control. [Mac compatibility](docs/mac-compatibility.md).
 
 <p align="center">
   <img src="docs/assets/menu-bar-preview.png" alt="Aervane running on macOS: Smart cooling with its target on the graph, a live dot-grid slider, and inline presets" width="344">
@@ -56,7 +56,7 @@ Fan control is physically verified on the **M4 Mac mini (Mac16,10)**. Other mode
 
 ### Build locally
 
-Requires a Mac and **Xcode 26.2 or newer**. The app targets macOS 14+ and uses one native frosted AppKit material for the panel and its pointer. Sensor compatibility is currently verified only on the M4 Mac mini.
+Requires a Mac and **Xcode 26.2 or newer**. The app targets macOS 13+ and uses one native frosted AppKit material for the panel and its pointer. The build produces universal arm64/x86_64 application and helper executables.
 
 ```sh
 git clone https://github.com/kirniy/aervane.git
@@ -74,7 +74,7 @@ For a development-signed build, set `SIGN_IDENTITY` to an identity from `securit
 - Click the menu bar temperature to open or close the panel.
 - Drag the fan slider or choose a preset. Before helper setup, the panel labels this as a preview; no fan write occurs.
 - Fan speed means **percentage of the reported maximum speed**. Firmware limits apply: a Mac with a 21% minimum cannot be commanded to stop. The interface shows that limit explicitly.
-- The helper is designed to return to automatic control after lost heartbeats, sensor failure, disconnection, or an optional timer the user enables. Manual control has no time limit by default. High temperature is informational; hardware speed limits still apply. Normal restoration is verified; fault scenarios need broader hardware validation.
+- The helper is designed to return to automatic control after lost heartbeats, sensor failure, disconnection, or an optional timer the user enables. Manual control has no time limit by default. High temperature is informational; hardware speed limits still apply. Multi-fan writes are transactional: modes, aggregate gate where required, targets, then verified readback. Failed operations restore the owned fans to Auto.
 
 ### Development
 

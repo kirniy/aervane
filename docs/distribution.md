@@ -8,7 +8,7 @@ Install the signed and notarized release:
 brew install --cask kirniy/tap/aervane
 ```
 
-The initial release targets Apple Silicon and macOS 14+. A tap provides an installation path without waiting for inclusion in Homebrew's central catalog. See [Homebrew taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
+The 0.5 build targets Intel and Apple Silicon on macOS 13+ with one universal archive. A tap provides an installation path without waiting for inclusion in Homebrew's central catalog. See [Homebrew taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
 
 ## Signing
 
@@ -27,7 +27,7 @@ SIGN_IDENTITY='Developer ID Application: …' NOTARY_PROFILE=aervane-notary tool
 python3 tools/prepare-distribution.py
 ```
 
-`release.sh` signs the app and helper, submits the archive, staples the accepted ticket and verifies the extracted archive. `prepare-distribution.py` checks identity/version, matching app/helper signing teams, architecture, Gatekeeper and the stapled ticket before generating the versioned ZIP, SHA-256 checksum, release metadata and matching cask.
+`release.sh` signs the app and helper, submits the archive, staples the accepted ticket and verifies the extracted archive. `prepare-distribution.py` checks identity/version, matching app/helper signing teams, both arm64 and x86_64 slices in each executable, the Mach-O minimum OS of every slice, Gatekeeper and the stapled ticket before generating the versioned ZIP, SHA-256 checksum, release metadata and matching cask.
 
 Ad hoc and development-signed archives are rejected. No placeholder checksums are published.
 

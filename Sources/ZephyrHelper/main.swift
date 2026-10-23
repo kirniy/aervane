@@ -10,7 +10,9 @@ final class Delegate: NSObject, NSXPCListenerDelegate {
         connection.setCodeSigningRequirement(requirement)
         connection.invalidationHandler = { service.clientDisconnected() }
         connection.interruptionHandler = { service.clientDisconnected() }
-        connection.activate(); return true
+        // NSXPCConnection.activate() is macOS 14+; resume() is the macOS 13 equivalent.
+        if #available(macOS 14.0, *) { connection.activate() } else { connection.resume() }
+        return true
     }
 }
 

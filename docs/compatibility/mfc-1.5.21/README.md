@@ -87,4 +87,29 @@ The script uses only Python’s standard library, rejects an unexpected binary h
 
 ## Coverage boundary
 
-This is the complete **embedded sensor/fan/model catalog and inspected SMC initializer**, not a dump of every register on every Mac ever made. MFC can enumerate additional keys dynamically. The Intel control implementation was not exhaustively traced. Presence in these tables does not establish that a key exists, is writable, or is supported by Aervane on every matching machine. Aervane’s physical control validation is currently one Mac16,10. No proprietary binaries, XML resources, or decompiled implementation are redistributed here.
+This is the complete **embedded sensor/fan/model catalog and inspected SMC initializer**, not a dump of every register on every Mac ever made. MFC can enumerate additional keys dynamically. The Intel aggregate-mode reader/writer and target decoder were subsequently traced; the details below record those results. Presence in these tables does not establish that a key exists, is writable, or is supported by Aervane on every matching machine. Aervane’s physical control validation is currently one Mac16,10. No proprietary binaries, XML resources, or decompiled implementation are redistributed here.
+
+
+## Additional control-path analysis
+
+The Intel aggregate mode writer constructs a two-byte `FS! ` value `[0x00, mask]`; bit 0 selects fan 0, bit 1 selects fan 1, and so forth through the low byte. The decoder uses the same byte order. An independent implementation must preserve unrelated mask bits when changing its participating fans, rather than replacing the entire register. The observed `fpe2` target format is big-endian unsigned fixed point with two fractional bits.
+
+The ARM64 mode writer at `0x10004b2a8` applies the model-gated `Ftst` flag **after the per-fan mode writes and before target writes**. It writes one byte: `1` when any fan is manual, `0` when all are automatic. This is a transaction-level flag, not an additional per-fan speed. Register presence, type and size still need runtime validation.
+
+REA evidence identities:
+
+- Intel mode reader: `ev_5f90ac5c6d056b5349bf5b7f7a12b4026d1ca0c22ca642608871a8056d6464d2`.
+- Intel fixed-point decoder: `ev_82f35e145b95da5184b7486a2a33e96d075f7cef23244630e587f49109e03831`.
+- Helper write byte order: `ev_17e5838def2ce79a359188157076e355988599965007890d8260a28c6dcde1ea`.
+- ARM64 mode/Ftst writer: `ev_cc45fbfa175b4a6e11f0d96aba2fa6f046976bd9d5b72e813d6483c0242fa974`.
+
+These are protocol observations. No vendor implementation is linked, copied into the app, or distributed.
+
+
+Protocol selection was traced separately on Intel. Initialization probes `FS! ` first and selects the aggregate protocol when that probe succeeds, including when per-fan keys also exist. Otherwise it selects the model-appropriate per-fan protocol. Both mode reads and writes use that stored selection; a later failure does not trigger a silent switch. There is no separate T2 test in this selection routine. Evidence: `ev_27513b6fcfe6503bd997069113f8fd0faedaa05e7779ddb5e6f0454d0e60325f` and `ev_058550683546eb9f6666dd77438645646040dd74b039e3fde8ed521fd49d868e`.
+
+### Apple Silicon HID temperature events
+
+The separate HID path enumerates services matching `PrimaryUsagePage=0xff00`, `PrimaryUsage=5`, selects exact catalog Product names and reads event type `15`, temperature field `0xf0000`. Each poll copies a fresh event. CPU and GPU service names are distinct; PMU, SSD and ambient sensors are not substituted for CPU temperature. REA evidence: `ev_717aa288b720aa7566f34a99c3afd9c77395e8619bdaf87b59760b2856f45269` (discovery), `ev_b4ff291c43c1080f6841940b0ace81f4aa6ed5bcb72bf210cc1d2c190500220e` (event read).
+
+Aervane implements this read-only interface independently with optional dynamic symbols, retained service/client lifetimes and balanced event ownership. `IOHIDFloat` uses the 64-bit `double` ABI. Macs without matching services retain their SMC sensor plan. A failed known HID sensor propagates an error instead of silently switching to a cooler subset.

@@ -11,6 +11,8 @@
 // interface used by the open-source smcFanControl family; no vendor binary is
 // linked into Zephyr.
 enum { ZSMC_USER_CLIENT_EVENT = 2, ZSMC_GET_KEY_COUNT = 4, ZSMC_READ_KEY = 5, ZSMC_WRITE_KEY = 6, ZSMC_GET_KEY_FROM_INDEX = 8, ZSMC_GET_KEY_INFO = 9 };
+// SMC-level result byte for an absent key (kSMCKeyNotFound).
+enum { ZSMC_RESULT_KEY_NOT_FOUND = 0x84 };
 static io_connect_t g_connection = IO_OBJECT_NULL;
 static pthread_mutex_t g_connection_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -58,7 +60,11 @@ int zsmc_key_info(uint32_t key, ZSMCKeyInfo *info) {
     if (zsmc_open() != KERN_SUCCESS) return kIOReturnNotOpen;
     ZSMCParam p; memset(&p, 0, sizeof(p)); p.key = key; p.data8 = ZSMC_GET_KEY_INFO;
     int result = call(ZSMC_USER_CLIENT_EVENT, &p);
-    if (result != KERN_SUCCESS || p.result != 0) return result ? result : kIOReturnError;
+    if (result != KERN_SUCCESS) return result;
+    // Only this SMC result says the key does not exist; callers treat every
+    // other failure as possibly transient.
+    if (p.result == ZSMC_RESULT_KEY_NOT_FOUND) return kIOReturnNotFound;
+    if (p.result != 0) return kIOReturnError;
     memcpy(info, &p.keyInfoData, sizeof(ZSMCKeyInfo));
     return KERN_SUCCESS;
 }
@@ -119,70 +125,10 @@ int zsmc_key_at_index(uint32_t index, uint32_t *key) {
     *key = p.key; return KERN_SUCCESS;
 }
 
-static int read_named_float(const char *name, float *value) {
-    unsigned char bytes[32]; size_t length = 0; uint32_t type = 0;
-    int result = zsmc_read_key_name(name, bytes, sizeof(bytes), &length, &type);
-    if (result != KERN_SUCCESS) return result;
-    if (type == 0x666c7420 && length == sizeof(float)) memcpy(value, bytes, sizeof(float));
-    else if (type == 0x66706532 && length == 2) *value = (float)((bytes[0] << 8) | bytes[1]) / 4.0f;
-    else return kIOReturnBadArgument;
-    return KERN_SUCCESS;
-}
-
 int zsmc_target_rpm(double minimum, double maximum, double percent, double *target) {
     if (!target || !isfinite(percent) || percent < 0 || percent > 100 ||
         !isfinite(minimum) || !isfinite(maximum) || minimum < 0 || maximum <= 0 || minimum > maximum)
         return kIOReturnBadArgument;
     *target = fmax(minimum, fmin(maximum, maximum * percent / 100.0));
     return KERN_SUCCESS;
-}
-
-static int read_fan_limits(uint32_t fan_index, float *minimum, float *maximum) {
-    char min_key[5], max_key[5];
-    snprintf(min_key, sizeof(min_key), "F%uMn", fan_index); snprintf(max_key, sizeof(max_key), "F%uMx", fan_index);
-    int result = read_named_float(min_key, minimum); if (result) return result;
-    result = read_named_float(max_key, maximum); if (result) return result;
-    if (!isfinite(*minimum) || !isfinite(*maximum) || *minimum < 0.0f || *maximum <= 0.0f || *minimum > *maximum)
-        return kIOReturnBadArgument;
-    return KERN_SUCCESS;
-}
-
-// Reads the mode key and requires the observed one-byte ui8 encoding with a
-// known value. A missing or unfamiliar mode key means control is unsupported.
-static int read_fan_mode(const char *mode_key, uint8_t *mode) {
-    size_t length = 0; uint32_t type = 0;
-    int result = zsmc_read_key_name(mode_key, mode, 1, &length, &type);
-    if (result != KERN_SUCCESS) return result;
-    if (length != 1 || type != 0x75693820 || (*mode != 0 && *mode != 1 && *mode != 3)) return kIOReturnUnsupported;
-    return KERN_SUCCESS;
-}
-
-int zsmc_write_fan_target(uint32_t fan_index, double rpm) {
-    if (fan_index > 9 || !isfinite(rpm)) return kIOReturnBadArgument;
-    float minimum = 0, maximum = 0;
-    int result = read_fan_limits(fan_index, &minimum, &maximum); if (result) return result;
-    // Callers compute the target from these same limits; allow only float
-    // rounding beyond them, never an out-of-range speed.
-    if (rpm < (double)minimum - 1.0 || rpm > (double)maximum + 1.0) return kIOReturnBadArgument;
-    float target = (float)fmax(minimum, fmin(maximum, rpm));
-    char target_key[5]; snprintf(target_key, sizeof(target_key), "F%uTg", fan_index);
-    ZSMCKeyInfo info; result = zsmc_key_info(key_code(target_key), &info); if (result) return result;
-    if (info.dataType == 0x666c7420 && info.dataSize == 4)
-        return zsmc_write_key_name(target_key, &target, sizeof(target), 0x666c7420);
-    if (info.dataType == 0x66706532 && info.dataSize == 2 && target <= 16383.75f) {
-        uint16_t raw = (uint16_t)lroundf(target * 4.0f);
-        uint8_t encoded[2] = { raw >> 8, raw & 0xff };
-        return zsmc_write_key_name(target_key, encoded, 2, 0x66706532);
-    }
-    return kIOReturnUnsupported;
-}
-
-int zsmc_write_fan_mode(uint32_t fan_index, uint8_t mode) {
-    // Only automatic (0) and manual (1) are ever written. Mode 3 is observed
-    // as a firmware-managed state, not something Aervane requests.
-    if (fan_index > 9 || (mode != 0 && mode != 1)) return kIOReturnBadArgument;
-    char mode_key[5]; snprintf(mode_key, sizeof(mode_key), "F%uMd", fan_index);
-    uint8_t current = 0;
-    int result = read_fan_mode(mode_key, &current); if (result) return result;
-    return zsmc_write_key_name(mode_key, &mode, sizeof(mode), 0x75693820);
 }

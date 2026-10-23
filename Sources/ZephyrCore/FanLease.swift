@@ -57,7 +57,14 @@ public protocol FanRecoveryDriver {
     func fanSnapshot() throws -> FanReadback
     func set(percent: Double) throws
     func restoreAutomatic() throws
+    func restoreAutomatic(fans: [Int]?) throws
     func automatic() throws -> Bool
+}
+
+public extension FanRecoveryDriver {
+    /// Recovery may restrict restoration to fans attributed by the journal.
+    /// Legacy drivers retain their all-fan behavior through this default.
+    func restoreAutomatic(fans: [Int]?) throws { try restoreAutomatic() }
 }
 
 /// Synchronous recovery policy. The helper owns queueing and timers; this
@@ -70,6 +77,9 @@ public final class FanRecoveryController {
     public private(set) var lastHeartbeat: Date?
     private var lastValidSnapshot: FanSnapshot?
     private var lastAutomaticReadback: FanReadback?
+    /// The fans the current lease wrote. A different set later is a
+    /// topology change: the watchdog restores Auto rather than guess.
+    public private(set) var ownedFans: [Int]?
 
     public init(driver: FanRecoveryDriver, now: @escaping () -> Date = Date.init) {
         self.driver = driver
@@ -90,8 +100,9 @@ public final class FanRecoveryController {
 
     /// Adopt a journaled lease only after the adapter has independently
     /// verified that the current hardware target belongs to that session.
-    public func recoverOwnedLease(_ session: UUID) {
+    public func recoverOwnedLease(_ session: UUID, fans: [Int]? = nil) {
         guard state.claim(session) else { return }
+        ownedFans = fans
         state.didSetManual(session)
         state.requestRestore(session)
     }
@@ -112,22 +123,29 @@ public final class FanRecoveryController {
                   lastHeartbeat.map({ now().timeIntervalSince($0) <= FanSafety.leaseTimeout }) ?? true else {
                 throw FanControlError.staleSensor
             }
-            guard before.fanCount == 1 else {
-                throw FanControlError.hardwareFailure("Manual control for multiple-fan Macs is not supported yet.")
+            // Preflight every fan before the first write: a complete,
+            // valid inventory and a known control path.
+            guard !before.fans.isEmpty else { throw FanControlError.unavailable }
+            guard before.isConsistent else {
+                throw FanControlError.hardwareFailure("Fan readings are incomplete (\(before.fans.count) of \(before.fanCount) fans valid). Nothing was changed.")
+            }
+            if let control = before.control, !control.isSupported {
+                throw FanControlError.hardwareFailure(control.message ?? "Fan control is unavailable on this Mac.")
+            }
+            if let owned = ownedFans, owned != before.fans.map(\.index) {
+                throw FanControlError.hardwareFailure("The fan set changed while Aervane controlled it. Nothing was changed.")
             }
             lastHeartbeat = now()
             try beforeWrite?(before)
             writeAttempted = true
+            ownedFans = before.fans.map(\.index)
             try driver.set(percent: requested)
             let after = try driver.snapshot()
             lastValidSnapshot = after
-            let expected = FanSafety.hardwareFloorClampedPercent(requested, snapshot: after)
-            guard !after.automatic,
-                  FanSafety.matchesRequestedPercent(after.targetPercent, expected: expected) else {
-                let observed = after.automatic ? "Auto" : after.targetPercent.map { String(format: "manual %.1f%%", $0) } ?? "manual, no target"
-                throw FanControlError.hardwareFailure("Fan target did not verify after setting: expected \(Int(expected.rounded()))%, read \(observed).")
+            if let mismatch = Self.verify(after, requested: requested, fans: ownedFans ?? []) {
+                throw FanControlError.hardwareFailure("Fan target did not verify after setting: \(mismatch).")
             }
-            guard !FanSafety.shouldRestoreAutomatic(snapshot: after, now: now(), lastHeartbeat: lastHeartbeat) else {
+            guard !FanSafety.shouldRestoreAutomatic(snapshot: after, now: now(), lastHeartbeat: lastHeartbeat, fanIndices: ownedFans) else {
                 throw FanControlError.hardwareFailure("Fan reached the target, but the post-write safety check failed (hottest \(Int(after.temperatureCelsius.rounded()))°C).")
             }
             state.didSetManual(session)
@@ -155,6 +173,26 @@ public final class FanRecoveryController {
         }
     }
 
+    /// Nil when every leased fan reads manual at max(requested, its floor);
+    /// otherwise what was read, fan by fan on multi-fan Macs.
+    static func verify(_ after: FanSnapshot, requested: Double, fans: [Int]) -> String? {
+        guard after.isConsistent, after.fans.map(\.index) == fans else {
+            return "expected fans \(fans), read \(after.fans.map(\.index)) of \(after.fanCount)"
+        }
+        if after.control?.usesFtst == true && after.aggregateGate != true {
+            return "expected Ftst gate 1, read \(after.aggregateGate == nil ? "unavailable" : "0")"
+        }
+        let multiple = fans.count > 1
+        let problems = after.fans.compactMap { fan -> String? in
+            let expected = FanSafety.expectedPercent(requested, fan: fan)
+            if fan.mode == .manual, FanSafety.matchesRequestedPercent(fan.targetPercent, expected: expected) { return nil }
+            let observed = fan.mode == .automatic ? "Auto" : fan.mode == .unknown ? "unknown mode"
+                : fan.targetPercent.map { String(format: "manual %.1f%%", $0) } ?? "manual, no target"
+            return "\(multiple ? "fan \(fan.index) " : "")expected \(Int(expected.rounded()))%, read \(observed)"
+        }
+        return problems.isEmpty ? nil : problems.joined(separator: "; ")
+    }
+
     @discardableResult
     public func restore(_ session: UUID) throws -> FanSnapshot {
         guard state.owns(session) else { throw FanControlError.notOwner }
@@ -162,11 +200,15 @@ public final class FanRecoveryController {
         guard attemptRestore(session) else {
             throw FanControlError.hardwareFailure("Automatic mode did not verify after restore.")
         }
+        // Report a fresh reading when one is available, so the reply never
+        // pairs the restored fans with an old sample time as if it were new.
+        if let fresh = try? driver.snapshot(), fresh.automatic {
+            lastValidSnapshot = fresh
+            return fresh
+        }
         guard let fan = lastAutomaticReadback, let previous = lastValidSnapshot else { throw FanControlError.hardwareFailure("Automatic mode restored, but no prior temperature sample is available.") }
-        return FanSnapshot(currentRPM: fan.currentRPM, minimumRPM: fan.minimumRPM,
-                           maximumRPM: fan.maximumRPM, targetPercent: fan.targetPercent,
-                           automatic: true, temperatureCelsius: previous.temperatureCelsius,
-                           sampledAt: previous.sampledAt, fanCount: previous.fanCount)
+        return FanSnapshot(fans: fan.fans, temperatureCelsius: previous.temperatureCelsius,
+                           sampledAt: previous.sampledAt, control: previous.control)
     }
 
     public func tick() {
@@ -177,10 +219,10 @@ public final class FanRecoveryController {
         }
         lastValidSnapshot = snapshot
         if snapshot.automatic {
-            state.restoreConfirmed(owner); lastHeartbeat = nil
+            state.restoreConfirmed(owner); lastHeartbeat = nil; ownedFans = nil
             return
         }
-        if FanSafety.shouldRestoreAutomatic(snapshot: snapshot, now: now(), lastHeartbeat: lastHeartbeat) {
+        if FanSafety.shouldRestoreAutomatic(snapshot: snapshot, now: now(), lastHeartbeat: lastHeartbeat, fanIndices: ownedFans) {
             state.requestRestore(owner); _ = attemptRestore(owner)
         }
     }
@@ -189,12 +231,12 @@ public final class FanRecoveryController {
     private func attemptRestore(_ session: UUID) -> Bool {
         guard state.owns(session), state.restorePending else { return false }
         do {
-            try driver.restoreAutomatic()
+            try driver.restoreAutomatic(fans: ownedFans)
             let fan = try driver.fanSnapshot()
             guard fan.automatic else { return false }
             lastAutomaticReadback = fan
             state.restoreConfirmed(session)
-            lastHeartbeat = nil
+            lastHeartbeat = nil; ownedFans = nil
             return true
         } catch { return false }
     }

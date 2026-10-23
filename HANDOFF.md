@@ -1,10 +1,10 @@
 # Aervane — development handoff
 
-Updated 2026-10-23. Public repository: https://github.com/kirniy/aervane. Native Swift/AppKit menu-bar app, with a small C AppleSMC bridge and no third-party runtime dependencies.
+Updated 2026-10-24. Public repository: https://github.com/kirniy/aervane. Native Swift/AppKit menu-bar app, with a small C AppleSMC bridge and no third-party runtime dependencies.
 
 ## Current work
 
-Version 0.4.0 is published on GitHub and Homebrew. The public cask upgrade from 0.3.0 passed, and the installed signature and stapled ticket validate. Final hardware readback: Manual 76%, target 3724 RPM, actual 3725 RPM. Smart and Return to Auto are off; saved target is 70°C.
+Version 0.5.0 compatibility work is in progress; 0.4.0 is the current public GitHub and Homebrew release. The public cask upgrade from 0.3.0 passed, and the installed signature and stapled ticket validate. Final hardware readback: Manual 76%, target 3724 RPM, actual 3725 RPM. Smart and Return to Auto are off; saved target is 70°C.
 
 Actual Claude implemented the all-speed Dot Grid wave, editable Smart target on the graph, inline first-run flow, and discoverable keyboard hints. Parent integration added independent fan/temperature reads, approval retry recovery, verified Auto before hiding fan controls, stable layouts through transient fan failures, and paused hidden onboarding motion. No new runtime dependencies or per-frame application loops.
 
@@ -24,7 +24,7 @@ A tiny, exceptionally polished macOS menu-bar utility. Temperature at a glance, 
 
 **High temperature must not block manual fan control.** The former 95°C restriction was an Aervane policy mistake, not an AppleSMC limit. It was removed from command acceptance and watchdog restoration. Do not reintroduce it. Hardware bounds, stale/invalid telemetry, lost clients, failed-write rollback and recovery remain applicable.
 
-Manual control has no expiry by default. Return to Auto is opt-in, with a 5–120 minute settings slider. It is separate from the helper connection watchdog and applies only to manual speeds. The user’s requested final state after all work is **Manual 76%, Smart OFF, Return to Auto OFF**. The user actively exercises the app during development; recheck the final state rather than relying on an earlier sample.
+Manual control has no expiry by default. Return to Auto is opt-in, with a 5–120 minute settings slider. It is separate from the helper connection watchdog and applies only to manual speeds. Preserve the latest user-selected state: **Smart ON, target 70°C, Return to Auto OFF** (superseding the earlier Manual 76% request). The user actively exercises the app during development; recheck the final state rather than relying on an earlier sample.
 
 Slider style is independent of effects: **Channel** or **Dot Grid**. The latest request authorizes redesigning both. Effects are Off/Subtle/Expressive, with system Reduce Motion/Transparency respected. The requested miniature fan pattern may rotate while the panel is visible using bounded compositor animations; stop it when hidden or motion/effects are disabled. No per-frame application loop, display link, network polling, telemetry or embedded browser. Actual heat and cooling power use distinct colors.
 
@@ -43,7 +43,7 @@ Development Mac: M4 Mac mini, `Mac16,10`, one fan, maximum 4900 RPM and minimum 
 
 [Embedded compatibility facts](docs/compatibility/mfc-1.5.21/README.md) cover 237 unique temperature identifiers, 414 sensor occurrences, 205 sensor/group rules, 46 model aliases, 14 fan-label entries and 15 initialized control constants from Macs Fan Control 1.5.21. Both architecture resource slices match; control predicates were checked against ARM64 instructions. No vendor executable, assets or decompiled source are committed.
 
-`Mac16,10` maps to `Macmini11,1`. Aervane reads its exact ten CPU keys. Catalog GPU keys `Tg04`/`Tg12` were absent in live reads here; GPU display reports unavailable rather than substituting unrelated temperatures. Other models retain candidate fallback. The catalog is not proof of universal fan control; this release currently supports one fan.
+`Mac16,10` maps to `Macmini11,1`. Aervane reads its exact ten CPU keys. Catalog GPU keys `Tg04`/`Tg12` were absent in live reads here; GPU display reports unavailable rather than substituting unrelated temperatures. Other models retain candidate fallback. The 0.5 implementation uses this catalog at runtime, discovers all fans, resolves Intel/per-fan control protocols and applies a linked percentage against each fan’s limits. See [Mac compatibility](docs/mac-compatibility.md).
 
 ## Build, diagnostics and distribution
 
@@ -64,6 +64,6 @@ This Mac’s existing Gatekeeper global configuration reports `override=security
 ## Follow-up verification
 
 - Public release/tap/CI evidence belongs in docs/distribution.md. Current real app images and Dot Grid animation are in docs/assets.
-- Finish local work with Manual 76%, SmartOFF, ReturnToAutoOFF. Preserve latest saved target (last observed 70°C); user actively changes settings.
+- Finish local work with the latest user selection, currently Smart ON, target 70°C, ReturnToAutoOFF; recheck preferences before replacement. Preserve latest saved target (last observed 70°C); user actively changes settings.
 - Physical dragging was user-confirmed. Broader crash/sleep/wake/watchdog, fanless/multi-fan models, VoiceOver, 1× and multi-display checks remain incomplete. Unit tests do not establish hardware coverage.
 - Read temperature independently of fan failures before claiming temperature-only support on fanless/unsupported models. The current release is physically verified only on the M4 mini.

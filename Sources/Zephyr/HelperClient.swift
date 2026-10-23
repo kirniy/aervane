@@ -89,7 +89,8 @@ public final class HelperClient: NSObject, @unchecked Sendable {
         defer { lock.unlock() }
         if let configurationError { return configurationError }
         if !activated {
-            connection.activate()
+            // NSXPCConnection.activate() is macOS 14+; resume() is the macOS 13 equivalent.
+            if #available(macOS 14.0, *) { connection.activate() } else { connection.resume() }
             activated = true
         }
         return nil

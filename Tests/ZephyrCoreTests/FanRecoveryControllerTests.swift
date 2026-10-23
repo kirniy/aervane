@@ -46,6 +46,28 @@ private final class FakeRecoveryDriver: FanRecoveryDriver {
 }
 
 final class FanRecoveryControllerTests: XCTestCase {
+    func testOwnedRestoreDispatchesScopedProtocolRequirement() {
+        final class ScopedDriver: FanRecoveryDriver {
+            let base = FakeRecoveryDriver()
+            var scoped: [[Int]?] = []
+            var unscoped = 0
+            func snapshot() throws -> FanSnapshot { try base.snapshot() }
+            func fanSnapshot() throws -> FanReadback { try base.fanSnapshot() }
+            func set(percent: Double) throws { try base.set(percent: percent) }
+            func automatic() throws -> Bool { try base.automatic() }
+            func restoreAutomatic() throws { unscoped += 1; try base.restoreAutomatic() }
+            func restoreAutomatic(fans: [Int]?) throws { scoped.append(fans); try base.restoreAutomatic() }
+        }
+        let concrete = ScopedDriver()
+        let existential: FanRecoveryDriver = concrete
+        let policy = FanRecoveryController(driver: existential)
+        policy.recoverOwnedLease(UUID(), fans: [0])
+        policy.tick()
+        XCTAssertEqual(concrete.scoped, [[0]])
+        XCTAssertEqual(concrete.unscoped, 0)
+        XCTAssertNil(policy.state.owner)
+    }
+
     func testSetReadbackUsesHardwareFloor() throws {
         let driver = FakeRecoveryDriver(target: nil, minimum: 1000, maximum: 4800)
         let controller = FanRecoveryController(driver: driver)

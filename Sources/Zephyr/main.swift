@@ -148,7 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.panelVisible = true; content.update(); positionPanel()
         panel.contentView?.layoutSubtreeIfNeeded()
         item.button?.highlight(true)
-        NSApp.activate()
+        if #available(macOS 14, *) { NSApp.activate() }
+        else { NSApp.activate(ignoringOtherApps: true) }
         panel.alphaValue = Theme.reduceMotion ? 1 : 0; panel.makeKeyAndOrderFront(nil)
         panel.invalidateShadow()
         panel.makeFirstResponder(content.preferredFirstResponder)
@@ -248,22 +249,28 @@ if CommandLine.arguments.contains("--verify-control") {
         if installer.status == .notRegistered || installer.status == .notFound {
             print("Aervane helper is not registered."); exit(0)
         }
-        guard try SMCReader().readFan().automatic else {
+        let smc = SMCBridge()
+        guard try FanInventoryReader(smc: smc, model: SMCBridge.model, platform: SMCBridge.platform).read().fans.allSatisfy(\.automatic) else {
             fputs("Restore Auto and quit Aervane before replacing the helper.\n", stderr); exit(1)
         }
         try installer.disable(); print("Aervane helper unregistered.")
     }
     catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
 } else if CommandLine.arguments.contains("--probe") {
-    let reader = SMCReader()
-    do {
-        let fan = try reader.readFan(), temp = try reader.readCPUTemperature(), hottest = try reader.readCPUHottestTemperature()
-        let target = fan.targetPercent.map { String(format: "%.1f%%", $0) } ?? "Auto"
-        print("CPU \(String(format: "%.1f", temp))°C | Hottest \(String(format: "%.1f", hottest))°C | Fan \(Int((fan.currentRPM / fan.maximumRPM * 100).rounded()))% | Target \(target) | Minimum \(Int(ceil(fan.minimumRPM / fan.maximumRPM * 100)))% | \(fan.automatic ? "Auto" : "Manual")")
-        let raw = try reader.readFanRegisters()
-        print("F0Md \(raw.mode) | F0Tg \(String(format: "%.1f", raw.targetRPM)) | F0Ac \(String(format: "%.1f", raw.actualRPM)) | F0Mn \(String(format: "%.1f", raw.minimumRPM)) | F0Mx \(String(format: "%.1f", raw.maximumRPM)) | FNum \(try reader.readFanCount())")
+    // Read-only. One line per fan plus a structured report (no writes).
+    let smc = SMCBridge(), model = SMCBridge.model, platform = SMCBridge.platform
+    let sensors = TemperatureSensors(smc: smc, model: model, platform: platform, hid: platform == .appleSilicon ? AppleSiliconHIDSource() : nil)
+    let inventory = FanInventoryReader(smc: smc, model: model, platform: platform)
+    let report = HardwareDiagnostics.collect(model: model, platform: platform, inventory: inventory, sensors: sensors)
+    if let cpu = try? sensors.readCPU() {
+        print("CPU \(String(format: "%.1f", cpu.average))°C | Hottest \(String(format: "%.1f", cpu.hottest))°C")
     }
-    catch { fputs("\(error)\n", stderr); exit(1) }
+    for fan in report.fans?.map(\.reading) ?? [] {
+        let target = fan.targetPercent.map { String(format: "%.1f%%", $0) } ?? "Auto"
+        print("Fan \(fan.index) | \(Int((fan.currentRPM / fan.maximumRPM * 100).rounded()))% (\(Int(fan.currentRPM.rounded())) RPM) | Target \(target) | Minimum \(Int(ceil(fan.floorPercent)))% | \(fan.mode.rawValue)")
+    }
+    print(report.json())
+    if report.cpuError != nil || report.fanError != nil { exit(1) }
 } else {
     let app = NSApplication.shared; let delegate = AppDelegate(); app.delegate = delegate; app.run()
 }

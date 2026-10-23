@@ -117,7 +117,9 @@ final class MaximumCoolingTests: XCTestCase {
         XCTAssertFalse(controller.state.owns(owner)); XCTAssertEqual(hardware.restores, 0)
     }
 
-    func testMaximumPreflightRejectsInvalidReadingsAndMultipleFans() {
+    /// `count = 2` is an aggregate-only snapshot claiming two fans without
+    /// per-fan readings; multi-fan control itself is supported (MultiFanTransactionTests).
+    func testMaximumPreflightRejectsInvalidReadingsAndIncompleteFanReadings() {
         for fault: (ThermalDriver) -> Void in [{ $0.temperature = .nan }, { $0.sampleAge = 11 }, { $0.count = 2 }] {
             let hardware = ThermalDriver(); fault(hardware)
             let controller = FanRecoveryController(driver: hardware, now: { hardware.clock })

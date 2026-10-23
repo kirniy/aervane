@@ -2,13 +2,12 @@ cask "aervane" do
   version "@VERSION@"
   sha256 "@SHA256@"
 
-  url "https://github.com/kirniy/aervane/releases/download/v#{version}/Aervane-#{version}-macos-arm64.zip"
+  url "https://github.com/kirniy/aervane/releases/download/v#{version}/Aervane-#{version}-macos-universal.zip"
   name "Aervane"
   desc "Menu bar temperature and fan control"
   homepage "https://github.com/kirniy/aervane"
 
-  depends_on arch: :arm64
-  depends_on macos: :sonoma
+  depends_on macos: :ventura
 
   app "Aervane.app"
 

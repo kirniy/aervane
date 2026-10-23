@@ -35,11 +35,11 @@ def checked_archive(archive, version, destination):
         info = plistlib.load(file)
     if info.get("CFBundleIdentifier") != "dev.kirniy.aervane" or info.get("CFBundleShortVersionString") != version:
         raise ValueError("App identity/version does not match VERSION")
-    if info.get("LSMinimumSystemVersion") != "14.0":
+    if info.get("LSMinimumSystemVersion") != "13.0":
         raise ValueError("Update distribution metadata for the changed minimum macOS")
     team = None
     for code in [app, app / "Contents/Library/LaunchDaemons/AervaneHelper"]:
-        run("/usr/bin/codesign", "--verify", "--deep", "--strict", str(code))
+        run("/usr/bin/codesign", "--verify", "--all-architectures", "--deep", "--strict", str(code))
         signature = run("/usr/bin/codesign", "--display", "--verbose=4", str(code))
         found = re.search(r"^TeamIdentifier=([A-Z0-9]{10})$", signature, re.MULTILINE)
         if "Authority=Developer ID Application:" not in signature or not found:
@@ -48,8 +48,13 @@ def checked_archive(archive, version, destination):
             raise ValueError("App and helper have different signing teams")
         team = found[1]
     for executable in [app / "Contents/MacOS/Aervane", app / "Contents/Library/LaunchDaemons/AervaneHelper"]:
-        if run("/usr/bin/lipo", "-archs", str(executable)).strip() != "arm64":
-            raise ValueError("This distribution currently targets arm64 only")
+        if set(run("/usr/bin/lipo", "-archs", str(executable)).split()) != {"arm64", "x86_64"}:
+            raise ValueError("Public distributions require both arm64 and x86_64 in the app and helper")
+        for architecture in ("arm64", "x86_64"):
+            build = run("xcrun", "vtool", "-arch", architecture, "-show-build", str(executable))
+            minimum = re.search(r"^\s*minos\s+(\d+)\.(\d+)(?:\.(\d+))?\s*$", build, re.MULTILINE)
+            if not minimum or "platform MACOS" not in build or tuple(int(v or 0) for v in minimum.groups()) > (13, 0, 0):
+                raise ValueError(f"{executable.name} {architecture} cannot run on the declared macOS 13 minimum")
     run("/usr/sbin/spctl", "--assess", "--type", "execute", "--verbose=2", str(app))
     run("xcrun", "stapler", "validate", str(app))
     return team
@@ -63,13 +68,13 @@ def prepare(archive, output):
         raise ValueError(f"Output already exists: {output}. Choose a new --output directory.")
     with tempfile.TemporaryDirectory(prefix="aervane-distribution-") as temp:
         team = checked_archive(archive, version, Path(temp))
-    filename = f"Aervane-{version}-macos-arm64.zip"
+    filename = f"Aervane-{version}-macos-universal.zip"
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     manifest = {
         "version": version,
         "bundleID": "dev.kirniy.aervane",
-        "arch": "arm64",
-        "minimumMacOS": 14,
+        "arch": ["arm64", "x86_64"],
+        "minimumMacOS": 13,
         "teamID": team,
         "notarized": True,
         "sha256": digest,

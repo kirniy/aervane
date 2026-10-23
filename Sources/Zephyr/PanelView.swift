@@ -423,7 +423,7 @@ final class PanelView: FlippedView, NSTextFieldDelegate, NSMenuDelegate {
         updateIntroduction()
         // A command error first; otherwise why Smart stopped, kept until the
         // next mode choice so an unexpected change is explained.
-        let note = model.error ?? model.smartNotice ?? (model.hasDetectedFan && !model.fanAvailable ? "Fan reading unavailable" : nil)
+        let note = model.error ?? model.smartNotice ?? (model.hasDetectedFan && !model.fanAvailable ? "Fan reading unavailable" : model.fanControlUnavailable)
         message.stringValue = note ?? ""; message.isHidden = note == nil
         message.toolTip = note
         settingsPage.updateStatus()

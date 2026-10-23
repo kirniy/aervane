@@ -29,5 +29,5 @@ fi
 VERIFY_DIR=$(mktemp -d "$ROOT/dist/archive-check.XXXXXX")
 trap 'rm -rf "$VERIFY_DIR"' EXIT
 ditto -x -k "$ROOT/dist/Aervane.app.zip" "$VERIFY_DIR"
-codesign --verify --deep --strict "$VERIFY_DIR/Aervane.app"
+codesign --verify --all-architectures --deep --strict "$VERIFY_DIR/Aervane.app"
 shasum -a 256 "$ROOT/dist/Aervane.app.zip"
