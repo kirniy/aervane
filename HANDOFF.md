@@ -4,13 +4,13 @@ Updated 2026-10-23. Public repository: https://github.com/kirniy/aervane. Native
 
 ## Current work
 
-Public Homebrew release is **0.2.0**. The integrated **0.3.0 Smart regulation and sensor-display correction passed 230 Mac tests**, was signed and installed, and exercised real fan changes. The user confirmed physical slider dragging and immediate Smart → Manual takeover. Two intermediate drafts passed notarization, but neither should be published: a further slider redesign is underway.
+Version 0.3.0 is ready for publication. The final Mac suite passed **257 tests**, including actual presentation-layer motion over time, rotor RPM scaling, full-cooling flow, reopen, and temperature-transition behavior. The signed archive passed Apple notarization and stapled-ticket validation.
 
-The reported 68°C beside “Above 73° · max cooling” had two causes. Smart used the hottest core while the panel showed averages; Smart now displays its actual controlling measurement, while the menu bar retains the selected source. The former target−3 full-speed curve was also too aggressive. The corrected working-target curve is 70% at the target and 100% at target+5°C, with a 1.5°C thermal deadband and bounded rising-trend anticipation. No artificial cooling-down timer or command-count ramp. At target86°C on the Mac, hottest CPU83.6–86.4°C produced confirmed targets80→76→71% as the load settled.
+Dot Grid is the default for new or invalid preferences; saved choices remain. Dot Grid has no fan graphics. Channel rotors follow actual measured RPM at a proportional visual scale. Both styles have continuous maximum-cooling effects. Temperature uses rounded tabular digits and a short crossfade rather than pushing the whole number.
 
-The latest request explicitly replaces the requirement to preserve the original Dot Grid artwork: **make Dot Grid taller, redesign both styles' effects, fully frost Channel at maximum, and add miniature rotating fan patterns whose speed follows cooling speed**. Actual Claude (`claude-vps`, session `5607838c-35a8-4f9d-9d16-b0e88e4fabf9`) is implementing this from a fresh integrated snapshot in **`/workspace/aervane-slider-redesign-20261023`**, base **`d7c16ddc2b4de3be80957e76c5be6e2490dca4df`**. The controller/helper/SMC paths are outside its scope.
+The static-animation complaint was traced to system Reduce Motion=true. At the user's explicit request it was disabled through System Settings and read back as false; Reduce Transparency remains on. Other users' accessibility settings remain respected. Dot Grid below 100% currently has interaction motion only; all-speed vitality and onboarding are proposals, not shipped features.
 
-Claude owns slider skins/support, necessary slider layout, related tests, DESIGN.md and its sidecar. The parent owns the remaining docs, Mac verification, signing and release. No signing credentials are on Claude's host. Never reapply an earlier full patch or publish a superseded distribution directory.
+Actual Claude collaborated via claude-vps; source was reviewed, tested and signed locally. No signing credentials were sent remotely. Final notarization: b67b970a-0834-4a43-b410-4c87cb41320f. Final archive SHA-256:3b6f6b21e31ea37a1d7b140dd2558cd403f77a5897ea8b6b8411ef7ac3705018. Never publish intermediate archives.
 
 ## Persistent product requirements
 
@@ -59,10 +59,9 @@ Distribution is **Homebrew only**. npm was explicitly canceled. Use `tools/relea
 
 This Mac’s existing Gatekeeper global configuration reports `override=security disabled`; it was not changed. Accepted notarization, signatures and stapled tickets are verified separately. Homebrew’s local online-audit preflight rejects Xcode 26.2 on macOS 27; the supported GitHub macOS 26 runner provides that check. Do not change global Xcode/security settings to work around it.
 
-## Validation still required
+## Follow-up verification
 
-- Integrate Claude's new slider redesign, review it, run the complete Mac suite and signed build. Render both styles, full frost, measured-speed rotors, all effects settings and motion lifecycle; measure open/closed resource use.
-- Preserve the completed Smart fixes: actual controlled temperature, moderate cooling around the working target, rising/falling behavior, target persistence/units, immediate Manual/Auto override. See [Smart cooling](docs/smart-cooling.md) for the 230-test checkpoint and live trace.
-- Re-notarize the final redesign, publish 0.3.0, update the tap, verify CI and a public Brew update. Leave **Manual 76%, SmartOFF, ReturnToAutoOFF**. Preserve the latest saved target: the user is actively testing and has changed it several times; last observed86°C, not the earlier73/67 or temporary90°C test.
-- Physical slider drag is user-confirmed. Repeated status-item clicks/outside dismissal, real VoiceOver, system Reduce Motion/Transparency, 1× and multiple displays remain incompletely tested. Light appearance and three-digit Fahrenheit were rendered on the Mac at the regulation checkpoint.
-- Physical crash/sleep/wake/lease-expiry, additional Mac models and multiple fans need broader testing. Automated policy/recovery tests are not hardware validation.
+- Public release/tap/CI evidence belongs in docs/distribution.md. Current real app images and Dot Grid animation are in docs/assets.
+- Finish local work with Manual 76%, SmartOFF, ReturnToAutoOFF. Preserve latest saved target (last observed 72°C); user actively changes settings.
+- Physical dragging was user-confirmed. Broader crash/sleep/wake/watchdog, fanless/multi-fan models, VoiceOver, 1× and multi-display checks remain incomplete. Unit tests do not establish hardware coverage.
+- Read temperature independently of fan failures before claiming temperature-only support on fanless/unsupported models. The current release is physically verified only on the M4 mini.

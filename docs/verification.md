@@ -1,3 +1,9 @@
+# Final 0.3.0 checkpoint
+
+The final Mac suite passed **257 tests** after the temperature crossfade change. Tests check rounded tabular digit widths, immediate latest values, one replaceable transition, and no fade for unit/source/missing-data changes. Core Animation stores CATransition under its reserved transition key; cancellation now uses that key. Two existing motion fixtures were corrected to exclude style-initialization reactions and render actual mode-switch geometry with system motion enabled.
+
+Installed app captures were refreshed, including an approximately 5-second Dot Grid recording with motion enabled. Apple accepted the final archive, and its ticket was stapled and validated; see distribution.md for the receipt.
+
 # Latest 0.3.0 verification checkpoint
 
 On 2026-10-23 the Mac suite passed 247 tests, including real-time presentation-layer movement at measured rotor rates, both maximum-cooling effects, redundant updates, reopening, and stopping under Reduce Motion. The initial freeze fixture sampled the preceding compositor frame; the corrected fixture commits the stop before taking its stationary baseline. These checks verify motion mechanics, not subjective visual quality.

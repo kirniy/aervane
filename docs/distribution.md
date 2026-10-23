@@ -49,3 +49,9 @@ Apple accepted notarization submission `f68f7cab-e535-4d76-b5e5-e0afe2307797`. T
 Archive SHA-256: `34c6a12cb9ae9255eb37cd5a4e827b11e1251526dd6165b96ff70f6126263991`.
 
 A fresh Homebrew installation of the public archive succeeded on the development Mac. Its downloaded checksum, installed Developer ID signatures and stapled ticket were verified. The ordinary first-launch Open confirmation was accepted; a newly registered helper then applied manual 76%. The tap’s macOS CI workflow passed cask style and the online audit: https://github.com/kirniy/homebrew-tap/actions/runs/39855983205.
+
+## 0.3.0 release receipt
+
+Apple accepted submission `b67b970a-0834-4a43-b410-4c87cb41320f`. The final temperature-crossfade build passed 257 Mac tests, Developer ID signature verification, stapling, extracted-archive checks and distribution preparation. Archive SHA-256: `3b6f6b21e31ea37a1d7b140dd2558cd403f77a5897ea8b6b8411ef7ac3705018`.
+
+The development Mac has a pre-existing global Gatekeeper override; assessment on this machine is not clean-machine Gatekeeper validation. Cryptographic signatures and the stapled Apple ticket were checked separately.
